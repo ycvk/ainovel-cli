@@ -124,7 +124,7 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 		done:              make(chan struct{}, 4),
 		lifecycle:         lifecycleIdle,
 	}
-	h.observer = newObserver(coordinator, store, h.emitEvent, h.emitDelta, h.emitClear)
+	h.observer = newObserver(coordinator, store, h.emitEvent, h.emitDelta, h.emitClear, cfg.DebugStreamThinking)
 	h.router = router
 
 	if err := store.RunMeta.Init(cfg.Style, cfg.Provider, cfg.ModelName); err != nil {
@@ -416,18 +416,7 @@ func (h *Host) emitEvent(ev Event) {
 
 func (h *Host) emitDelta(delta string) {
 	defer func() { recover() }()
-	select {
-	case h.streamCh <- delta:
-	default:
-		select {
-		case <-h.streamCh:
-		default:
-		}
-		select {
-		case h.streamCh <- delta:
-		default:
-		}
-	}
+	h.streamCh <- delta
 }
 
 func (h *Host) emitClear() {

@@ -99,7 +99,7 @@ func BuildCoordinator(
 	coordinatorModel := models.ForRoleWithFailover("coordinator", reportFailover)
 
 	// Coordinator 的 ContextManager 在 Agent 构造时一次性生成，按启动模型解析。
-	// 运行中 /model 切换到更小窗口的模型时，建议用户显式配置 context_window 兜底。
+	// 运行中 /model 切换到更小窗口的模型时，建议用户显式配置 compact_window 兜底。
 	_, coordinatorModelName, _ := models.CurrentSelection("coordinator")
 	coordinatorContextWindow, coordinatorSource := cfg.ResolveContextWindow(coordinatorModelName)
 	// Writer 的 ContextManager 由工厂每次调用重建，窗口随模型 swap 动态跟随（见下方工厂）。

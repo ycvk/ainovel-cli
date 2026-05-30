@@ -1,8 +1,10 @@
 package bootstrap
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -50,19 +52,25 @@ func LoadConfig(flagPath string) (Config, error) {
 
 	// 1. 全局配置
 	if p := DefaultConfigPath(); p != "" {
-		if global, err := loadJSONFile(p); err == nil {
-			cfg = global
+		global, err := loadConfigPatchFile(p)
+		switch {
+		case err == nil:
+			cfg = mergeConfig(cfg, global)
+		case !os.IsNotExist(err):
+			return cfg, fmt.Errorf("load config %s: %w", p, err)
 		}
 	}
 
 	// 2. 项目级覆盖
-	if project, err := loadJSONFile("ainovel.json"); err == nil {
+	if project, err := loadConfigPatchFile("ainovel.json"); err == nil {
 		cfg = mergeConfig(cfg, project)
+	} else if !os.IsNotExist(err) {
+		return cfg, fmt.Errorf("load config ainovel.json: %w", err)
 	}
 
 	// 3. CLI flag 覆盖
 	if flagPath != "" {
-		override, err := loadJSONFile(flagPath)
+		override, err := loadConfigPatchFile(flagPath)
 		if err != nil {
 			return cfg, fmt.Errorf("load config %s: %w", flagPath, err)
 		}
@@ -75,37 +83,83 @@ func LoadConfig(flagPath string) (Config, error) {
 // LoadConfigFile 读取单个 JSON 配置文件，支持 // 行注释。
 // 不做任何合并，仅返回该文件自身的配置。文件不存在时返回错误。
 func LoadConfigFile(path string) (Config, error) {
-	return loadJSONFile(path)
-}
-
-// loadJSONFile 读取 JSON 配置文件，支持 // 行注释。
-// 文件不存在时返回错误（由调用方决定是否忽略）。
-func loadJSONFile(path string) (Config, error) {
-	data, err := os.ReadFile(path)
+	patch, err := loadConfigPatchFile(path)
 	if err != nil {
 		return Config{}, err
 	}
-	cleaned := stripJSONComments(data)
-	var cfg Config
-	if err := json.Unmarshal(cleaned, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return cfg, nil
+	return mergeConfig(Config{}, patch), nil
 }
 
-// mergeConfig 将 overlay 合并到 base 上。非零值字段覆盖，map 按 key 合并。
-func mergeConfig(base, overlay Config) Config {
-	if overlay.Provider != "" {
-		base.Provider = overlay.Provider
+// configPatch tracks field presence so overlays can explicitly set zero values
+// such as false, 0, "", and [].
+type configPatch struct {
+	Provider            *string                        `json:"provider,omitempty"`
+	ModelName           *string                        `json:"model,omitempty"`
+	Providers           map[string]providerConfigPatch `json:"providers,omitempty"`
+	Roles               map[string]roleConfigPatch     `json:"roles,omitempty"`
+	Style               *string                        `json:"style,omitempty"`
+	CompactWindow       *int                           `json:"compact_window,omitempty"`
+	DebugStreamThinking *bool                          `json:"debug_stream_thinking,omitempty"`
+}
+
+type providerConfigPatch struct {
+	Type    *string   `json:"type,omitempty"`
+	APIKey  *string   `json:"api_key,omitempty"`
+	BaseURL *string   `json:"base_url,omitempty"`
+	Models  *[]string `json:"models,omitempty"`
+}
+
+type roleConfigPatch struct {
+	Provider  *string     `json:"provider,omitempty"`
+	Model     *string     `json:"model,omitempty"`
+	Fallbacks *[]ModelRef `json:"fallbacks,omitempty"`
+}
+
+// loadConfigPatchFile 读取 JSON 配置文件，支持 // 行注释。
+// 文件不存在时返回错误（由调用方决定是否忽略）。
+func loadConfigPatchFile(path string) (configPatch, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return configPatch{}, err
 	}
-	if overlay.ModelName != "" {
-		base.ModelName = overlay.ModelName
+	return parseConfigPatch(path, data)
+}
+
+func parseConfigPatch(path string, data []byte) (configPatch, error) {
+	cleaned := stripJSONComments(data)
+	dec := json.NewDecoder(bytes.NewReader(cleaned))
+	dec.DisallowUnknownFields()
+
+	var patch configPatch
+	if err := dec.Decode(&patch); err != nil {
+		return configPatch{}, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if overlay.Style != "" {
-		base.Style = overlay.Style
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("multiple JSON values")
+		}
+		return configPatch{}, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if overlay.CompactWindow > 0 {
-		base.CompactWindow = overlay.CompactWindow
+	return patch, nil
+}
+
+// mergeConfig 将 overlay 合并到 base 上。出现过的标量字段覆盖，map 按 key 合并。
+func mergeConfig(base Config, overlay configPatch) Config {
+	if overlay.Provider != nil {
+		base.Provider = *overlay.Provider
+	}
+	if overlay.ModelName != nil {
+		base.ModelName = *overlay.ModelName
+	}
+	if overlay.Style != nil {
+		base.Style = *overlay.Style
+	}
+	if overlay.CompactWindow != nil {
+		base.CompactWindow = *overlay.CompactWindow
+	}
+	if overlay.DebugStreamThinking != nil {
+		base.DebugStreamThinking = *overlay.DebugStreamThinking
 	}
 
 	// Providers: overlay 的 key 覆盖 base 同名 key
@@ -115,17 +169,17 @@ func mergeConfig(base, overlay Config) Config {
 		}
 		for k, v := range overlay.Providers {
 			existing := base.Providers[k]
-			if v.Type != "" {
-				existing.Type = v.Type
+			if v.Type != nil {
+				existing.Type = *v.Type
 			}
-			if v.APIKey != "" {
-				existing.APIKey = v.APIKey
+			if v.APIKey != nil {
+				existing.APIKey = *v.APIKey
 			}
-			if v.BaseURL != "" {
-				existing.BaseURL = v.BaseURL
+			if v.BaseURL != nil {
+				existing.BaseURL = *v.BaseURL
 			}
-			if len(v.Models) > 0 {
-				existing.Models = append([]string(nil), v.Models...)
+			if v.Models != nil {
+				existing.Models = append([]string(nil), (*v.Models)...)
 			}
 			base.Providers[k] = existing
 		}
@@ -138,14 +192,14 @@ func mergeConfig(base, overlay Config) Config {
 		}
 		for k, v := range overlay.Roles {
 			existing := base.Roles[k]
-			if v.Provider != "" {
-				existing.Provider = v.Provider
+			if v.Provider != nil {
+				existing.Provider = *v.Provider
 			}
-			if v.Model != "" {
-				existing.Model = v.Model
+			if v.Model != nil {
+				existing.Model = *v.Model
 			}
-			if len(v.Fallbacks) > 0 {
-				existing.Fallbacks = append([]ModelRef(nil), v.Fallbacks...)
+			if v.Fallbacks != nil {
+				existing.Fallbacks = append([]ModelRef(nil), (*v.Fallbacks)...)
 			}
 			base.Roles[k] = existing
 		}

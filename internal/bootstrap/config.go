@@ -125,6 +125,10 @@ type Config struct {
 	// 提前介入避免性能塌方。0 表示不限上限（用模型真窗口）。
 	// 该配置永远不会让 effective 超过模型真窗口，因此切到小窗口模型也安全。
 	CompactWindow int `json:"compact_window,omitempty"`
+
+	// DebugStreamThinking 显式开启后才把模型 thinking 流投到实时输出主面板。
+	// 默认关闭，避免不稳定 provider 的内部思考噪声污染用户可读的创作流。
+	DebugStreamThinking bool `json:"debug_stream_thinking,omitempty"`
 }
 
 // ValidateBase 校验基础配置。

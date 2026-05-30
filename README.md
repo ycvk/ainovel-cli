@@ -244,10 +244,11 @@ ainovel-cli
 
 覆盖规则说明：
 
-- 标量字段按后者覆盖前者，例如 `provider`、`model`、`style`
-- `providers` 和 `roles` 按 key 合并，同名项内部按字段覆盖
-- 未填写的字段会继承上层配置，例如项目级配置只写 `base_url` 时会保留全局配置中的 `api_key`
-- 当前不支持用空字符串显式清空上层已有值；如需清空，请直接编辑更高优先级的配置文件
+- 标量字段按后者覆盖前者，例如 `provider`、`model`、`style`、`compact_window`、`debug_stream_thinking`
+- `providers` 和 `roles` 按 key 合并，同名项内部按字段出现覆盖
+- 未写出的字段会继承上层配置，例如项目级配置只写 `base_url` 时会保留全局配置中的 `api_key`
+- 显式写出的空字符串、空数组、`0`、`false` 会覆盖上层配置
+- 配置文件使用严格字段校验；未知字段或解析错误会直接报错
 
 `providers.<name>.models` 为可选字段，用于声明该 provider 下允许在 TUI `/model` 面板中切换的模型列表；如果未配置，系统会回退为当前配置文件里已经出现过的该 provider 模型。
 
@@ -321,11 +322,11 @@ ainovel-cli
 }
 ```
 
-支持的 Provider：`openrouter` / `anthropic` / `gemini` / `openai` / `deepseek` / `qwen` / `glm` / `grok` / `ollama` / `bedrock` 及任意自定义代理。
+支持的 Provider：`openrouter` / `anthropic` / `gemini` / `openai` / `deepseek` / `qwen` / `glm` / `grok` / `mimo` / `ollama` / `bedrock` 及任意自定义代理。
 
 关于 `api_key`：
 
-- `openrouter` / `anthropic` / `gemini` / `openai` / `deepseek` / `qwen` / `glm` / `grok` 这类托管接口通常需要填写 `api_key`
+- `openrouter` / `anthropic` / `gemini` / `openai` / `deepseek` / `qwen` / `glm` / `grok` / `mimo` 这类托管接口通常需要填写 `api_key`
 - `ollama` 和 `bedrock` 允许不填 `api_key`
 - 显式指定了 `type` 的自定义代理允许不填 `api_key`
 

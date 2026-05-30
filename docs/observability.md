@@ -4,7 +4,7 @@
 
 ## 1. 先看进度事实
 
-默认小说目录是 `output/novel/`，配置中的 `output_dir` 可覆盖。排障时优先打开：
+默认小说目录是 `output/novel/`。当前用户配置不暴露 `output_dir` 字段；排障时优先打开：
 
 - `meta/progress.json`
   当前阶段、流程、当前章节、已完成章节、总字数、正在写的章节、章节字数。
@@ -104,4 +104,3 @@ TUI 重放、恢复控制和任务日志从这里读取。若界面显示和 Sto
 - `internal/agents/ctxpack/`
 - `internal/tools/novel_context.go`
 - `internal/store/`
-

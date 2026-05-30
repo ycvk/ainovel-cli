@@ -67,6 +67,7 @@ type observer struct {
 	aborting atomic.Bool
 
 	streamThinking        bool
+	streamThinkingEnabled bool
 	lastThinkingByAgent   map[string]string          // agent → 最近的累积 thinking 文本（用于提取增量 delta）
 	dispatchStarts        map[string]*activeCall     // dispatched agent → 进行中的 DISPATCH 调用
 	currentDispatchTarget string                     // 当前正在执行的 subagent 名（handleToolEnd 时 Args 可能为空）
@@ -94,17 +95,18 @@ type agentState struct {
 	updated time.Time
 }
 
-func newObserver(coordinator *agentcore.Agent, s *storepkg.Store, emitEv func(Event), emitD func(string), emitC func()) *observer {
+func newObserver(coordinator *agentcore.Agent, s *storepkg.Store, emitEv func(Event), emitD func(string), emitC func(), streamThinkingEnabled bool) *observer {
 	o := &observer{
-		emitEv:              emitEv,
-		emitD:               emitD,
-		emitC:               emitC,
-		store:               s,
-		agents:              make(map[string]*agentState),
-		lastThinkingByAgent: make(map[string]string),
-		dispatchStarts:      make(map[string]*activeCall),
-		toolStarts:          make(map[string]*activeCall),
-		streamExtractors:    make(map[string]*agentExtractor),
+		emitEv:                emitEv,
+		emitD:                 emitD,
+		emitC:                 emitC,
+		store:                 s,
+		agents:                make(map[string]*agentState),
+		streamThinkingEnabled: streamThinkingEnabled,
+		lastThinkingByAgent:   make(map[string]string),
+		dispatchStarts:        make(map[string]*activeCall),
+		toolStarts:            make(map[string]*activeCall),
+		streamExtractors:      make(map[string]*agentExtractor),
 	}
 	o.unsub = coordinator.Subscribe(o.handle)
 	return o
@@ -226,6 +228,9 @@ func (o *observer) handleMessageUpdate(ev agentcore.Event) {
 	}
 	// Coordinator 的 tool-call 参数是给 subagent 的任务 JSON，没有可读内容，直接丢弃。
 	if ev.DeltaKind == agentcore.DeltaToolCall {
+		return
+	}
+	if ev.DeltaKind == agentcore.DeltaThinking && !o.streamThinkingEnabled {
 		return
 	}
 	o.emitStreamDelta(ev.Delta, ev.DeltaKind == agentcore.DeltaThinking)
@@ -437,6 +442,13 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 // - DeltaToolCall 只对已知的长内容工具（如 draft_chapter.content）抽取字段流出；其他工具的参数 JSON 全部丢弃
 func (o *observer) handleSubagentDelta(p *agentcore.ProgressPayload) {
 	if p.DeltaKind != agentcore.DeltaToolCall {
+		if p.DeltaKind == agentcore.DeltaThinking {
+			if !o.streamThinkingEnabled {
+				return
+			}
+			o.emitStreamDelta(p.Delta, true)
+			return
+		}
 		o.emitStreamDelta(p.Delta, false)
 		return
 	}
@@ -488,6 +500,9 @@ func (o *observer) handleSubagentDelta(p *agentcore.ProgressPayload) {
 }
 
 func (o *observer) handleThinkingProgress(ev agentcore.Event) {
+	if !o.streamThinkingEnabled {
+		return
+	}
 	agent := ev.Progress.Agent
 	thinking := ev.Progress.Thinking
 	if agent == "" || thinking == "" {

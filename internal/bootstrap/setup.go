@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	configtemplate "github.com/voocel/ainovel-cli"
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
 
@@ -155,79 +156,7 @@ func saveExampleConfig() {
 	if err != nil {
 		return
 	}
-	example := `{
-  // 默认 provider（指向 providers 中的 key）和模型
-  "provider": "openrouter",
-  "model": "google/gemini-2.5-flash",
-
-  // Provider 凭证库
-  "providers": {
-    "openrouter": {
-      "api_key": "your-key-here",
-      "base_url": "https://openrouter.ai/api/v1",
-      "models": ["google/gemini-2.5-flash", "google/gemini-2.5-pro"]
-    },
-    "anthropic": {
-      "api_key": "",
-      "models": ["claude-sonnet-4"]
-    },
-    "gemini": {
-      "api_key": "",
-      "models": ["gemini-2.5-flash", "gemini-2.5-pro"]
-    },
-    "ollama": {
-      "base_url": "http://localhost:11434",
-      "models": ["qwen3:14b"]
-    },
-    "bedrock": {
-      "base_url": ""
-    }
-    // 自定义代理示例：
-    // "my-proxy": {
-    //   "type": "openai",
-    //   "api_key": "sk-xxx", // 可选：若代理不需要认证可省略
-    //   "base_url": "https://proxy.example.com/v1"
-    // }
-  },
-
-  // 角色级模型覆盖（可选，不配则全用上面的 model）
-  // "roles": {
-  //   "writer": {
-  //     "provider": "anthropic",
-  //     "model": "claude-sonnet-4",
-  //     "fallbacks": [
-  //       {
-  //         "provider": "openrouter",
-  //         "model": "google/gemini-2.5-pro"
-  //       }
-  //     ]
-  //   },
-  //   "architect": {
-  //     "provider": "openrouter",
-  //     "model": "google/gemini-2.5-pro"
-  //   },
-  //   "editor": {
-  //     "provider": "openrouter",
-  //     "model": "google/gemini-2.5-flash"
-  //   },
-  //   "coordinator": {
-  //     "provider": "openrouter",
-  //     "model": "google/gemini-2.5-flash"
-  //   }
-  // },
-
-  "style": "default"
-
-  // 上下文窗口由模型名自动解析（见 ~/.ainovel/models-cache.json，每 24h 从
-  // OpenRouter 刷新）。自定义代理 / 未登记模型兜底为 128k。
-  //
-  // 可选：上下文压缩使用的窗口上限。effective = min(模型真窗口, compact_window)。
-  // 用途：1M 名义窗口模型在 200k+ 通常已经注意力衰退，配置 300000 让压缩按 300k
-  // 提前触发，避免性能塌方。仅影响压缩阈值，不会缩小 LLM API 实际请求长度。
-  // "compact_window": 300000
-}
-`
-	_ = os.WriteFile(filepath.Join(dir, "config.example.jsonc"), []byte(example), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "config.example.jsonc"), []byte(configtemplate.ConfigExampleJSONC), 0o644)
 }
 
 // printStepDone 打印一步完成的确认行。
