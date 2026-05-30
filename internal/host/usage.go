@@ -420,8 +420,7 @@ func (t *UsageTracker) applyState(state domain.UsageState) {
 	} else {
 		t.perAgent = make(map[string]*agentTotals, len(state.PerAgent))
 		for role, v := range state.PerAgent {
-			tot := totalsFromState(v)
-			t.perAgent[role] = &tot
+			t.perAgent[role] = new(totalsFromState(v))
 		}
 	}
 	if state.PerModel == nil {
@@ -429,8 +428,7 @@ func (t *UsageTracker) applyState(state domain.UsageState) {
 	} else {
 		t.perModel = make(map[string]*agentTotals, len(state.PerModel))
 		for model, v := range state.PerModel {
-			tot := totalsFromState(v)
-			t.perModel[model] = &tot
+			t.perModel[model] = new(totalsFromState(v))
 		}
 	}
 	t.missingAssistantUsage = state.MissingUsage

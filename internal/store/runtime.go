@@ -176,8 +176,7 @@ func (s *RuntimeStore) PeekControl() (*domain.ControlIntent, error) {
 	if err != nil || len(intents) == 0 {
 		return nil, err
 	}
-	item := intents[0]
-	return &item, nil
+	return new(intents[0]), nil
 }
 
 // DequeueControl 删除一条已处理的控制指令。

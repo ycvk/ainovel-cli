@@ -103,8 +103,7 @@ func (r *ModelRegistry) Resolve(pattern string) (*ModelEntry, bool) {
 			best = i
 		}
 	}
-	entry := r.models[best]
-	return &entry, true
+	return new(r.models[best]), true
 }
 
 // ResolveContextWindow 返回某个模型的上下文窗口；未命中返回 0。
@@ -171,4 +170,3 @@ func (r *ModelRegistry) MergeModels(fetched []ModelEntry) {
 		}
 	}
 }
-

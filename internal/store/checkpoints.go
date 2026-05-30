@@ -106,8 +106,7 @@ func (cs *CheckpointStore) Latest(scope domain.Scope) *domain.Checkpoint {
 	defer cs.io.mu.RUnlock()
 	for i := len(cs.cache) - 1; i >= 0; i-- {
 		if cs.cache[i].Scope.Matches(scope) {
-			cp := cs.cache[i]
-			return &cp
+			return new(cs.cache[i])
 		}
 	}
 	return nil
@@ -133,8 +132,7 @@ func (cs *CheckpointStore) LatestGlobal() *domain.Checkpoint {
 	if len(cs.cache) == 0 {
 		return nil
 	}
-	cp := cs.cache[len(cs.cache)-1]
-	return &cp
+	return new(cs.cache[len(cs.cache)-1])
 }
 
 // All 返回全部 checkpoint 列表副本（按 seq 递增）。

@@ -1,6 +1,6 @@
 # ainovel-cli
 
-全自动 AI 长篇小说创作引擎。Coordinator 在一次 Prompt 里驱动 Architect / Writer / Editor 三个子代理完成整本书的创作，Host 只做启动、恢复和观察。从一句话需求到完整小说，全程无需人工干预。
+全自动 AI 长篇小说创作引擎。Coordinator 在一次 Prompt 里驱动 Architect / Writer / Editor 三个子代理完成整本书的创作，Host 负责启动、恢复、观察、干预注入和事实路由。从一句话需求到完整小说，全程无需人工干预。
 
 <p align="center">
   <img src="scripts/sample.gif" alt="ainovel-cli demo" width="800">
@@ -10,7 +10,7 @@
 ## 特性
 
 - **多智能体协作** — Coordinator 在一次长循环中调度 Architect / Writer / Editor 三个子代理，自主决策创作流程
-- **LLM 驱动长循环** — 一次 Prompt 写完整本书，Host 不介入调度。越简单越稳定，拒绝复杂编排
+- **LLM 驱动长循环** — 一次 Prompt 写完整本书，语义决策归 Coordinator，Host 只处理可由事实层确定的下一步路由
 - **Step 级断点恢复** — 每个工具执行成功后写入 checkpoint，崩溃后精确到 plan/draft/check/commit 步骤级恢复
 - **卷弧双层滚动规划** — 长篇不再一次性规划全部章节。初始只规划前 2 卷弧骨架 + 第 1 弧详细章节，后续弧/卷在写作推进到时再由 Architect 展开，每次展开都参考前文摘要和角色状态，远期规划不空洞
 - **相关章节智能推荐** — 每章写作时从伏笔、角色出场、状态变化、关系四个维度自动推荐相关历史章节，配合下一章预告，确保 500+ 章长篇的连续性
@@ -22,12 +22,12 @@
 
 ## 架构
 
-核心设计：**LLM 驱动，Host 服务**。Coordinator 在一次 Run 中自主决策整本书的创作流程，Host 只做启动、恢复和事件观察。
+核心设计：**LLM 驱动，Host 服务**。Coordinator 负责语义决策和子代理协作，Host 负责启动、恢复、事件观察、用户干预注入，以及基于事实层的确定性路由。
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                Host（薄外壳）                     │
-│           启动 / 恢复 / 观察 / 干预注入            │
+│             Host（运行时服务层）                  │
+│  启动 / 恢复 / 观察 / 干预注入 / 事实路由          │
 └──────────────────────┬──────────────────────────┘
                        │ 一次 Prompt
 ┌──────────────────────▼──────────────────────────┐
@@ -46,8 +46,8 @@
 └─────────────────────────────────────────────────┘
 ```
 
-- **Host** — 启动 Coordinator、崩溃恢复、事件投影给 TUI。不做任何调度决策
-- **Coordinator** — 唯一的决策者，在一次 Run 里驱动规划→写作→评审→总结的完整流程
+- **Host** — 启动 Coordinator、崩溃恢复、事件投影给 TUI、接收用户干预；对下一章、弧末评审、弧/卷摘要、扩弧等查表型流程执行确定性路由
+- **Coordinator** — 语义决策者，在一次 Run 里驱动规划→写作→评审→总结的完整流程；规划选型、评审裁定、用户干预影响范围等仍由 LLM 判断
 - **SubAgents** — Architect / Writer / Editor 各自独立 context，通过 Store 中的工件协作
 - **Tools** — 原子 IO + checkpoint 写入，只返事实 JSON，不夹带指令
 
@@ -440,12 +440,13 @@ output/{novel_name}/
 
 ### LLM 驱动，越简单越稳定
 
-- **决策权归 LLM** — 流程决策全部由 Coordinator 自主判断，Host 不介入。工具失败时返回结构化错误，由 LLM 自行决定重试或调整策略
+- **语义决策权归 LLM** — 规划选型、评审裁定、用户干预影响范围等由 Coordinator 判断。工具失败时返回结构化错误，由 LLM 自行决定重试或调整策略
 - **工具只返事实** — 原子 IO + checkpoint 写入，返回值是 JSON 事实字段（`final_verdict` / `pending_rewrites` / `arc_end_reached`），不夹带任何指令字符串
+- **事实路由驱动下一步** — Host 订阅子代理完成事件后读取 Store，通过纯函数路由派发下一章、弧末评审、摘要、扩弧等确定性指令；裁定场景仍返回 Coordinator
 - **Reminder 驱动每轮** — Host 在每轮 LLM 调用前读事实层，运行纯函数 generator 生成 `<system-reminder>` 注入，指令不进持久历史、每轮从事实重算
 - **StopGuard 物理守门** — `Phase ≠ Complete` 时 Coordinator 物理上不可 `end_turn`，连续阻拦超限才升级终止
-- **拒绝复杂编排** — 没有 task queue、没有 scheduler、没有 policy engine。Coordinator 的一次 Run 就是唯一的控制流
-- **模型越强收益越大** — 架构把决策权留在 prompt 和工具语义里，模型升级后直接吃到收益，Host 一行不用改
+- **拒绝复杂编排** — 没有通用 task scheduler 和 policy engine；Host 路由只覆盖事实层可确定的窄流程，不扩展成第二套编排系统
+- **模型越强收益越大** — 架构把语义决策留在 prompt 和工具语义里，模型升级后直接吃到收益
 
 ### 全自动闭环
 
@@ -457,7 +458,7 @@ output/{novel_name}/
                 → 弧级摘要 → 角色快照 → 完整成书
 ```
 
-- **Coordinator 自主调度** — 在一次长循环里读事实层 + Reminder 决定下一步，无需 Host 干预
+- **Coordinator 自主裁定** — 在一次长循环里读事实层 + Reminder 处理语义判断；Host 只在明确事实分支上补齐下一步指令
 - **Writer 自主创作** — 每章独立完成 plan → draft → check → commit 的完整闭环
 - **Editor 自主评审** — 跨章节分析结构问题，输出裁定及影响范围
 - **Architect 自主构建** — 从一句话需求推导出完整设定，弧/卷边界时自主展开后续规划
@@ -476,7 +477,7 @@ output/{novel_name}/
 
 ## 技术栈
 
-- **Go 1.25** — 主语言
+- **Go 1.26** — 主语言
 - **[agentcore](https://github.com/voocel/agentcore)** — 极简 Agent 内核（tool-calling + streaming）
 - **[litellm](https://github.com/voocel/litellm)** — 统一 LLM 接口适配
 - **[Bubble Tea](https://github.com/charmbracelet/bubbletea)** — 终端 TUI 框架
