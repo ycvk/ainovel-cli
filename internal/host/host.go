@@ -39,7 +39,6 @@ type Host struct {
 	writerRestore     *ctxpack.WriterRestorePack
 	observer          *observer
 	router            *flow.Dispatcher
-	routerDetach      func()
 	usage             *UsageTracker
 	usageCancel       context.CancelFunc // 停掉 autoSaveLoop 并触发最后一次 flush
 
@@ -106,7 +105,7 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 	usageCtx, usageCancel := context.WithCancel(context.Background())
 	usage.StartAutoSave(usageCtx)
 
-	coordinator, askUser, restore, coordinatorCtxMgr := agents.BuildCoordinator(cfg, store, models, bundle, usage.Record)
+	coordinator, askUser, restore, coordinatorCtxMgr, router := agents.BuildCoordinator(cfg, store, models, bundle, usage.Record)
 	store.Signals.ClearStaleSignals()
 
 	h := &Host{
@@ -126,8 +125,7 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 		lifecycle:         lifecycleIdle,
 	}
 	h.observer = newObserver(coordinator, store, h.emitEvent, h.emitDelta, h.emitClear)
-	h.router = flow.NewDispatcher(coordinator, store)
-	h.routerDetach = h.router.Attach()
+	h.router = router
 
 	if err := store.RunMeta.Init(cfg.Style, cfg.Provider, cfg.ModelName); err != nil {
 		slog.Error("初始化运行元信息失败", "module", "boot", "err", err)
@@ -174,7 +172,10 @@ func (h *Host) StartPrepared(promptText string) error {
 	}
 	// 主动派发一次首条指令：若已进入写作阶段（Phase=Writing），Host 立即下达；
 	// 规划阶段 Route 返回 nil，无副作用。
-	h.router.Dispatch()
+	if err := h.router.Dispatch(); err != nil {
+		h.coordinator.Abort()
+		return fmt.Errorf("flow dispatch: %w", err)
+	}
 
 	h.mu.Lock()
 	h.lifecycle = lifecycleRunning
@@ -214,7 +215,10 @@ func (h *Host) Resume() (string, error) {
 		return "", fmt.Errorf("resume prompt: %w", err)
 	}
 	// 主动派发一次首条指令，避免 Coordinator 对恢复 prompt 只回文字而 StopGuard 反复拦截。
-	h.router.Dispatch()
+	if err := h.router.Dispatch(); err != nil {
+		h.coordinator.Abort()
+		return "", fmt.Errorf("flow dispatch: %w", err)
+	}
 
 	h.mu.Lock()
 	h.lifecycle = lifecycleRunning
@@ -301,10 +305,6 @@ func (h *Host) Abort() bool {
 func (h *Host) Close() {
 	h.observer.setAborting(true)
 	h.coordinator.AbortSilent()
-	if h.routerDetach != nil {
-		h.routerDetach()
-		h.routerDetach = nil
-	}
 	if h.usageCancel != nil {
 		h.usageCancel()
 		h.usageCancel = nil

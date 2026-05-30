@@ -13,6 +13,7 @@ import (
 	"github.com/voocel/ainovel-cli/assets"
 	"github.com/voocel/ainovel-cli/internal/agents/ctxpack"
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
+	"github.com/voocel/ainovel-cli/internal/host/flow"
 	"github.com/voocel/ainovel-cli/internal/host/reminder"
 	"github.com/voocel/ainovel-cli/internal/rules"
 	"github.com/voocel/ainovel-cli/internal/store"
@@ -52,7 +53,7 @@ func BuildCoordinator(
 	models *bootstrap.ModelSet,
 	bundle assets.Bundle,
 	recordUsage UsageRecorder,
-) (*agentcore.Agent, *tools.AskUserTool, *ctxpack.WriterRestorePack, *corecontext.ContextEngine) {
+) (*agentcore.Agent, *tools.AskUserTool, *ctxpack.WriterRestorePack, *corecontext.ContextEngine, *flow.Dispatcher) {
 	// 共享工具
 	rulesOpts := rules.DefaultOptions(bundle.RulesFS)
 	contextTool := tools.NewContextTool(store, bundle.References, cfg.Style, rulesOpts)
@@ -249,6 +250,7 @@ func BuildCoordinator(
 		CommitOnProject:  true,
 	})
 
+	flowDispatcher := flow.NewDispatcher(nil, store)
 	agent := agentcore.NewAgent(
 		agentcore.WithModel(coordinatorModel),
 		agentcore.WithSystemPrompt(bundle.Prompts.Coordinator),
@@ -259,10 +261,12 @@ func BuildCoordinator(
 		// subagent 是流程主通道；真实错误应显式返回给 Host，而不是在单次 run 内永久禁用工具。
 		agentcore.WithMaxToolErrors(0),
 		agentcore.WithMaxRetries(subagentMaxRetries),
+		agentcore.WithMiddlewares(flowDispatcher.Middleware()),
 		agentcore.WithContextManager(coordinatorEngine),
 		agentcore.WithStopGuard(reminder.NewStopGuard(store, nil)),
 	)
-	return agent, askUser, restore, coordinatorEngine
+	flowDispatcher.Bind(agent)
+	return agent, askUser, restore, coordinatorEngine, flowDispatcher
 }
 
 type saveFoundationResult struct {
