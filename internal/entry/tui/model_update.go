@@ -312,36 +312,7 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleVerticalScrollKey(msg tea.KeyPressMsg, upward bool) (tea.Model, tea.Cmd) {
-	if m.focusPane == focusStream {
-		if upward {
-			m.streamScroll = false
-		}
-		var cmd tea.Cmd
-		m.streamVP, cmd = m.streamVP.Update(msg)
-		if !upward && m.streamVP.AtBottom() {
-			m.streamScroll = true
-		}
-		return m, cmd
-	}
-	if m.focusPane == focusDetail {
-		var cmd tea.Cmd
-		m.detailVP, cmd = m.detailVP.Update(msg)
-		return m, cmd
-	}
-	if m.focusPane == focusState {
-		var cmd tea.Cmd
-		m.stateVP, cmd = m.stateVP.Update(msg)
-		return m, cmd
-	}
-	if upward {
-		m.autoScroll = false
-	}
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
-	if !upward && m.viewport.AtBottom() {
-		m.autoScroll = true
-	}
-	return m, cmd
+	return m.scrollPane(m.focusPane, msg, keyScrollDirection(upward))
 }
 
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
@@ -376,27 +347,10 @@ func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.hoverActive = false
 	}
 
-	var cmd tea.Cmd
-	if m.focusPane == focusStream {
-		m.streamVP, cmd = m.streamVP.Update(msg)
-		if pressed {
-			m.streamScroll = m.streamVP.AtBottom()
-		}
-		return m, cmd
+	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
+		return m.scrollPaneAtMouse(wheel)
 	}
-	if m.focusPane == focusDetail {
-		m.detailVP, cmd = m.detailVP.Update(msg)
-		return m, cmd
-	}
-	if m.focusPane == focusState {
-		m.stateVP, cmd = m.stateVP.Update(msg)
-		return m, cmd
-	}
-	m.viewport, cmd = m.viewport.Update(msg)
-	if pressed {
-		m.autoScroll = m.viewport.AtBottom()
-	}
-	return m, cmd
+	return m.scrollPane(m.focusPane, msg, scrollDirectionNone)
 }
 
 func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
