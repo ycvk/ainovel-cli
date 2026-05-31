@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	configtemplate "github.com/voocel/ainovel-cli"
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
@@ -272,7 +272,7 @@ type setupSelectModel struct {
 func (m setupSelectModel) Init() tea.Cmd { return nil }
 
 func (m setupSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch msg.String() {
 		case "up", "k":
 			if m.cursor > 0 {
@@ -292,7 +292,7 @@ func (m setupSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m setupSelectModel) View() string {
+func (m setupSelectModel) View() tea.View {
 	var b strings.Builder
 	b.WriteString(setupHeaderStyle.Render(m.title))
 	b.WriteString("\n\n")
@@ -306,7 +306,7 @@ func (m setupSelectModel) View() string {
 		b.WriteString(cursor + label + "\n")
 	}
 	b.WriteString(setupDimStyle.Render("\n  ↑↓ 选择  Enter 确认  Esc 取消"))
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // ---------- 文本输入 ----------
@@ -323,7 +323,7 @@ type setupInputModel struct {
 func (m setupInputModel) Init() tea.Cmd { return nil }
 
 func (m setupInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		switch msg.String() {
 		case "enter":
 			if utils.CleanInputLine(m.value) != "" || m.defaultValue != "" || m.allowEmpty {
@@ -338,17 +338,15 @@ func (m setupInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.value = string(runes[:len(runes)-1])
 			}
 		default:
-			if msg.Type == tea.KeyRunes {
-				m.value += utils.CleanInputRunes(msg.Runes)
-			} else if msg.Type == tea.KeySpace {
-				m.value += " "
+			if text := msg.Key().Text; text != "" {
+				m.value += utils.CleanInputRunes([]rune(text))
 			}
 		}
 	}
 	return m, nil
 }
 
-func (m setupInputModel) View() string {
+func (m setupInputModel) View() tea.View {
 	var b strings.Builder
 	b.WriteString(setupHeaderStyle.Render(m.label))
 	b.WriteString("\n\n")
@@ -362,5 +360,5 @@ func (m setupInputModel) View() string {
 	}
 	b.WriteString(setupDimStyle.Render("  (Enter 确认, Esc 取消)"))
 	b.WriteString("\n")
-	return b.String()
+	return tea.NewView(b.String())
 }

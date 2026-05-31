@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	"charm.land/lipgloss/v2"
 	"github.com/voocel/ainovel-cli/internal/entry/startup"
 	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
@@ -83,7 +83,7 @@ type cocreateState struct {
 
 func newCoCreateState(initial string) *cocreateState {
 	makeVP := func() viewport.Model {
-		vp := viewport.New(0, 0)
+		vp := newViewport(0, 0)
 		vp.MouseWheelEnabled = true
 		vp.MouseWheelDelta = 3
 		return vp
@@ -443,9 +443,8 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 	if vpH < 1 {
 		vpH = 1
 	}
-	if state.convVP.Width != contentW || state.convVP.Height != vpH {
-		state.convVP.Width = contentW
-		state.convVP.Height = vpH
+	if state.convVP.Width() != contentW || state.convVP.Height() != vpH {
+		resizeViewport(&state.convVP, contentW, vpH)
 	}
 	state.convVP.SetContent(strings.Join(lines, "\n"))
 	if state.convFollow {
@@ -485,9 +484,8 @@ func renderCoCreatePromptPanel(width, height int, state *cocreateState) string {
 	if vpHeight < 3 {
 		vpHeight = 3
 	}
-	if state.promptVP.Width != contentW || state.promptVP.Height != vpHeight {
-		state.promptVP.Width = contentW
-		state.promptVP.Height = vpHeight
+	if state.promptVP.Width() != contentW || state.promptVP.Height() != vpHeight {
+		resizeViewport(&state.promptVP, contentW, vpHeight)
 	}
 	state.promptVP.MouseWheelEnabled = true
 	state.promptVP.SetContent(text)

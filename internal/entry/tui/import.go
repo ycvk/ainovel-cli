@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
@@ -47,7 +47,7 @@ type importLine struct {
 func newImportState(reqID int, source string, width, height int, cancel context.CancelFunc) *importState {
 	boxW, boxH := reportModalSize(width, height)
 	contentW := paddedModalContentWidth(boxW)
-	vp := viewport.New(contentW, boxH-4)
+	vp := newViewport(contentW, boxH-4)
 	s := &importState{
 		reqID:     reqID,
 		source:    source,
@@ -161,12 +161,12 @@ func renderImportModal(width, height int, s *importState) string {
 	}
 	boxW, boxH := reportModalSize(width, height)
 	contentW := paddedModalContentWidth(boxW)
-	if s.viewport.Width != contentW {
-		s.viewport.Width = contentW
+	if s.viewport.Width() != contentW {
+		s.viewport.SetWidth(contentW)
 		s.refresh(contentW)
 	}
-	if s.viewport.Height != boxH-4 {
-		s.viewport.Height = boxH - 4
+	if s.viewport.Height() != boxH-4 {
+		s.viewport.SetHeight(boxH - 4)
 	}
 
 	hint := "  ↑↓ 滚动 · Esc 取消/关闭"
@@ -175,12 +175,12 @@ func renderImportModal(width, height int, s *importState) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
-func (m Model) handleImportKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleImportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.importer == nil {
 		return m, nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch keyString(msg) {
+	case keyEsc:
 		if !m.importer.done && m.importer.cancel != nil {
 			m.importer.cancel()
 			return m, nil
@@ -190,13 +190,13 @@ func (m Model) handleImportKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.textarea.Focus()
 		}
 		return m, nil
-	case tea.KeyUp:
+	case keyUp:
 		m.importer.viewport.ScrollUp(1)
-	case tea.KeyDown:
+	case keyDown:
 		m.importer.viewport.ScrollDown(1)
-	case tea.KeyPgUp:
+	case keyPgUp:
 		m.importer.viewport.HalfPageUp()
-	case tea.KeyPgDown:
+	case keyPgDown:
 		m.importer.viewport.HalfPageDown()
 	}
 	return m, nil

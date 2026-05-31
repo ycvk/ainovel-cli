@@ -481,7 +481,7 @@ output/{novel_name}/
 - **Go 1.26** — 主语言
 - **[agentcore](https://github.com/voocel/agentcore)** — 极简 Agent 内核（tool-calling + streaming）
 - **[litellm](https://github.com/voocel/litellm)** — 统一 LLM 接口适配
-- **[Bubble Tea](https://github.com/charmbracelet/bubbletea)** — 终端 TUI 框架
+- **[Bubble Tea](https://charm.land/bubbletea/v2)** — 终端 TUI 框架
 
 ## License
 

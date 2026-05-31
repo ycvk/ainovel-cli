@@ -3,9 +3,9 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type helpState struct {
@@ -17,7 +17,7 @@ func newHelpState(width, height int) *helpState {
 	contentW := paddedModalContentWidth(boxW)
 	text := renderHelpText(contentW)
 
-	vp := viewport.New(contentW, boxH-4)
+	vp := newViewport(contentW, boxH-4)
 	vp.SetContent(text)
 	return &helpState{viewport: vp}
 }
@@ -72,11 +72,11 @@ func renderHelpModal(width, height int, state *helpState) string {
 	boxW, boxH := reportModalSize(width, height)
 	contentW := paddedModalContentWidth(boxW)
 
-	if state.viewport.Width != contentW {
-		state.viewport.Width = contentW
+	if state.viewport.Width() != contentW {
+		state.viewport.SetWidth(contentW)
 	}
-	if state.viewport.Height != boxH-4 {
-		state.viewport.Height = boxH - 4
+	if state.viewport.Height() != boxH-4 {
+		state.viewport.SetHeight(boxH - 4)
 	}
 
 	modal := renderPaddedModalFrame(
@@ -89,27 +89,27 @@ func renderHelpModal(width, height int, state *helpState) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
-func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.help == nil {
 		return m, nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch keyString(msg) {
+	case keyEsc:
 		m.help = nil
 		if m.mode != modeDone {
 			return m, m.textarea.Focus()
 		}
 		return m, nil
-	case tea.KeyUp:
+	case keyUp:
 		m.help.viewport.ScrollUp(1)
 		return m, nil
-	case tea.KeyDown:
+	case keyDown:
 		m.help.viewport.ScrollDown(1)
 		return m, nil
-	case tea.KeyPgUp:
+	case keyPgUp:
 		m.help.viewport.HalfPageUp()
 		return m, nil
-	case tea.KeyPgDown:
+	case keyPgDown:
 		m.help.viewport.HalfPageDown()
 		return m, nil
 	default:

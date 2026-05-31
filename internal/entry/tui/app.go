@@ -1,7 +1,7 @@
 package tui
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/voocel/ainovel-cli/assets"
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
 	"github.com/voocel/ainovel-cli/internal/host"
@@ -28,7 +28,7 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle) error {
 	// 不在启动时全局开启鼠标上报：欢迎页用不到鼠标，关闭上报可保留终端原生
 	// 拖拽选中复制。进入创作工作台（modeRunning）时再由 enterRunning 打开上报，
 	// 以支持点击切面板 / 滚轮 / 拖拽侧边栏。
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err
 }

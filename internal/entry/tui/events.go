@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/voocel/ainovel-cli/internal/diag"
 	"github.com/voocel/ainovel-cli/internal/domain"
 	"github.com/voocel/ainovel-cli/internal/entry/startup"
@@ -55,7 +55,7 @@ type (
 	cursorTickMsg      time.Time // 流式光标独立 tick
 	streamDeltaMsg     string    // 流式 token 增量
 	streamClearMsg     struct{}  // 清空流式缓冲（新消息开始）
-	streamFlushTickMsg struct{}  // 60fps 节流刷新流式面板（合并 token 级 delta）
+	streamFlushTickMsg struct{}  // active-only 节流刷新流式面板（合并 token 级 delta）
 	quitResetMsg       struct{}  // 双次 Ctrl+C 超时重置
 )
 
@@ -129,7 +129,7 @@ func runCoCreate(rt *host.Host, state *cocreateState) tea.Cmd {
 			reply, err := rt.CoCreateStream(ctx, history, func(kind, text string) {
 				select {
 				case state.deltaCh <- cocreateStreamItem{kind: kind, text: text}:
-				default:
+				case <-ctx.Done():
 				}
 			})
 			state.doneCh <- cocreateDoneMsg{reply: reply, err: err}
@@ -226,8 +226,7 @@ func tickCursor() tea.Cmd {
 }
 
 // tickStreamFlush 驱动流式面板节流刷新。streamDelta 不再每个 token 立即重渲，
-// 而是 mark dirty；本 tick 每 16ms（~60fps）检查并合并刷新一次，把 LLM 高速流式
-// 期的"每秒数十次全量重渲"压回 60 次上限。
+// 而是 mark dirty 并按需排一次 16ms flush；idle 期间不再常驻发 tick。
 func tickStreamFlush() tea.Cmd {
 	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
 		return streamFlushTickMsg{}

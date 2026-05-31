@@ -1,10 +1,9 @@
 package tui
 
 import (
-	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/voocel/ainovel-cli/internal/domain"
 	"github.com/voocel/ainovel-cli/internal/entry/startup"
 	"github.com/voocel/ainovel-cli/internal/host"
@@ -22,7 +21,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshDetailViewport()
 		m.refreshStateViewport()
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKeyMsg(msg)
 	case tea.MouseMsg:
 		return m.handleMouseMsg(msg)
@@ -34,12 +33,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if next, cmd, handled := m.handleOverlayKeyMsg(msg); handled {
 		return next, cmd
 	}
 
-	if msg.Type == tea.KeyCtrlC {
+	if keyString(msg) == keyCtrlC {
 		if m.quitPending {
 			return m, tea.Quit
 		}
@@ -55,7 +54,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.handleBaseKeyMsg(msg)
 }
 
-func (m Model) handleOverlayKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+func (m Model) handleOverlayKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	switch {
 	case m.askState != nil:
 		return m.handleBlockingModalKey(msg, m.handleAskUserKey)
@@ -74,8 +73,8 @@ func (m Model) handleOverlayKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 }
 
-func (m Model) handleBlockingModalKey(msg tea.KeyMsg, next func(tea.KeyMsg) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd, bool) {
-	if msg.Type == tea.KeyCtrlC {
+func (m Model) handleBlockingModalKey(msg tea.KeyPressMsg, next func(tea.KeyPressMsg) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd, bool) {
+	if keyString(msg) == keyCtrlC {
 		if m.quitPending {
 			return m, tea.Quit, true
 		}
@@ -85,7 +84,7 @@ func (m Model) handleBlockingModalKey(msg tea.KeyMsg, next func(tea.KeyMsg) (tea
 	m.quitPending = false
 	// 跨模态全局快捷键：modal 打开期间也要能切鼠标上报，否则共创/help/report 等
 	// 锁屏式 modal 下用户无法用原生拖拽选中复制。
-	if msg.Type == tea.KeyCtrlR {
+	if keyString(msg) == keyCtrlR {
 		next, cmd := m.toggleMouseReporting()
 		return next, cmd, true
 	}
@@ -102,10 +101,7 @@ func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.mouseOff = !m.mouseOff
-	if m.mouseOff {
-		return m, tea.DisableMouse
-	}
-	return m, tea.EnableMouseCellMotion
+	return m, nil
 }
 
 // enterRunning 进入创作工作台：开启鼠标上报（工作台需要点击切面板 / 滚轮 /
@@ -113,32 +109,32 @@ func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
 func (m *Model) enterRunning() tea.Cmd {
 	m.mode = modeRunning
 	m.mouseOff = false
-	return tea.EnableMouseCellMotion
+	return nil
 }
 
-func (m Model) handleCommandPaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+func (m Model) handleCommandPaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if !m.compActive {
 		return m, nil, false
 	}
 
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch keyString(msg) {
+	case keyEsc:
 		m.clearCommandPalette()
 		return m, nil, true
-	case tea.KeyUp:
+	case keyUp:
 		if m.compIdx > 0 {
 			m.compIdx--
 		}
 		return m, nil, true
-	case tea.KeyDown:
+	case keyDown:
 		if m.compIdx < len(m.compItems)-1 {
 			m.compIdx++
 		}
 		return m, nil, true
-	case tea.KeyTab:
+	case keyTab:
 		m.acceptCommandCompletion()
 		return m, nil, true
-	case tea.KeyEnter:
+	case keyEnter:
 		item, ok := m.acceptCommandCompletion()
 		if !ok {
 			return m, nil, true
@@ -154,16 +150,16 @@ func (m Model) handleCommandPaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool
 	}
 }
 
-func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleBaseKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// 节流防御：粘贴 \n 在不支持 bracketed paste 的终端会退化成连续 KeyEnter；
 	// 真人按 Enter 与前一字符间隔通常 > 100ms，<50ms 极可能是粘贴流残片。
-	// 只记 KeyRunes（字符流）—— 功能键（↑↓/Tab/Ctrl-x）不应污染节流，
+	// 只记 Key.Text（字符流）—— 功能键（↑↓/Tab/Ctrl-x）不应污染节流，
 	// 否则用户翻历史选定后立刻按 Enter 会被误吞。
-	if msg.Type == tea.KeyRunes {
+	if keyText(msg) != "" {
 		m.lastKeyAt = time.Now()
 	}
-	switch msg.Type {
-	case tea.KeyEscape:
+	switch keyString(msg) {
+	case keyEsc:
 		if m.mode == modeRunning && m.snapshot.IsRunning {
 			return m, abortRuntime(m.runtime)
 		}
@@ -173,10 +169,10 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.refitTextareaHeight()
 		m.clearCommandPalette()
 		return m, nil
-	case tea.KeyCtrlL:
+	case keyCtrlL:
 		m.resetOutputPanels()
 		return m, nil
-	case tea.KeyCtrlU:
+	case keyCtrlU:
 		// 清空当前输入；同时退出历史浏览态。
 		m.textarea.Reset()
 		m.historyIdx = len(m.inputHistory)
@@ -184,9 +180,9 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.refitTextareaHeight()
 		m.clearCommandPalette()
 		return m, nil
-	case tea.KeyCtrlR:
+	case keyCtrlR:
 		return m.toggleMouseReporting()
-	case tea.KeyTab:
+	case keyTab:
 		if m.mode == modeNew {
 			if m.cocreate != nil {
 				return m, nil
@@ -201,22 +197,22 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.focusPane = (m.focusPane + 1) % focusPaneCount
 		return m, nil
-	case tea.KeyEnter:
+	case keyEnter:
 		// Alt+Enter 是主动换行，让 textarea.Update 接管（KeyMap.InsertNewline 已绑到此键）。
-		if msg.Alt {
+		if keyAlt(msg) {
 			break
 		}
 		// 与上一次非 Enter 按键间隔过短 → 视为粘贴流的 \n 残片：
-		// 替换为空格保留视觉间隔，与 cleanHumanKeyRunes 路径语义一致（"abc\ndef" → "abc def"）。
+		// 替换为空格保留视觉间隔，与 cleanHumanKeyText 路径语义一致（"abc\ndef" → "abc def"）。
 		// 防御 bracketed paste 失效的终端环境（旧 SSH/某些 tmux 配置）。
 		if !m.lastKeyAt.IsZero() && time.Since(m.lastKeyAt) < 50*time.Millisecond {
 			var cmd tea.Cmd
-			m.textarea, cmd = m.textarea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+			m.textarea, cmd = m.textarea.Update(keyPressText(" "))
 			m.refitTextareaHeight()
 			return m, cmd
 		}
 		return m.handleEnterKey()
-	case tea.KeyUp:
+	case keyUp:
 		// 多行输入：让 textarea 接管光标行内移动（落到 switch 后的 textarea.Update）
 		if m.textareaIsMultiline() {
 			break
@@ -226,7 +222,7 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.handleVerticalScrollKey(msg, true)
-	case tea.KeyDown:
+	case keyDown:
 		if m.textareaIsMultiline() {
 			break
 		}
@@ -234,11 +230,11 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.handleVerticalScrollKey(msg, false)
-	case tea.KeyPgUp:
+	case keyPgUp:
 		return m.handleVerticalScrollKey(msg, true)
-	case tea.KeyPgDown:
+	case keyPgDown:
 		return m.handleVerticalScrollKey(msg, false)
-	case tea.KeyEnd:
+	case keyEnd:
 		switch m.focusPane {
 		case focusStream:
 			m.streamScroll = true
@@ -254,11 +250,11 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if msg.Type == tea.KeyRunes && (containsSGRFragment(string(msg.Runes)) || isCSILeak(msg.Runes)) {
+	if keyText(msg) != "" && (containsSGRFragment(keyText(msg)) || isCSILeak(keyRunes(msg))) {
 		return m, nil
 	}
 	var ok bool
-	if msg, ok = cleanHumanKeyRunes(msg); !ok {
+	if msg, ok = cleanHumanKeyText(msg); !ok {
 		return m, nil
 	}
 
@@ -315,7 +311,7 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) handleVerticalScrollKey(msg tea.KeyMsg, upward bool) (tea.Model, tea.Cmd) {
+func (m Model) handleVerticalScrollKey(msg tea.KeyPressMsg, upward bool) (tea.Model, tea.Cmd) {
 	if m.focusPane == focusStream {
 		if upward {
 			m.streamScroll = false
@@ -349,12 +345,14 @@ func (m Model) handleVerticalScrollKey(msg tea.KeyMsg, upward bool) (tea.Model, 
 }
 
 func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	mouse := msg.Mouse()
+	_, pressed := msg.(tea.MouseClickMsg)
 	if m.cocreate != nil {
 		// 鼠标按 X 坐标分流：屏幕左半 = conv 面板，右半 = prompt 面板。
 		// modal 居中且 conv 占左 ~58%，用屏幕中线判别足够准确。
 		// 用户在 conv 区滚轮自动停止 follow（让其能稳定停在某个历史位置）。
 		var cmd tea.Cmd
-		if msg.X < m.width/2 {
+		if mouse.X < m.width/2 {
 			m.cocreate.convFollow = false
 			m.cocreate.convVP, cmd = m.cocreate.convVP.Update(msg)
 			if m.cocreate.convVP.AtBottom() {
@@ -368,10 +366,10 @@ func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.modelSwitch != nil || m.askState != nil {
 		return m, nil
 	}
-	if pane, ok := m.paneAtMouse(msg.X, msg.Y); ok {
+	if pane, ok := m.paneAtMouse(mouse.X, mouse.Y); ok {
 		m.hoverPane = pane
 		m.hoverActive = true
-		if msg.Action == tea.MouseActionPress {
+		if pressed {
 			m.focusPane = pane
 		}
 	} else {
@@ -381,7 +379,7 @@ func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	if m.focusPane == focusStream {
 		m.streamVP, cmd = m.streamVP.Update(msg)
-		if msg.Action == tea.MouseActionPress {
+		if pressed {
 			m.streamScroll = m.streamVP.AtBottom()
 		}
 		return m, cmd
@@ -395,7 +393,7 @@ func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	m.viewport, cmd = m.viewport.Update(msg)
-	if msg.Action == tea.MouseActionPress {
+	if pressed {
 		m.autoScroll = m.viewport.AtBottom()
 	}
 	return m, cmd
@@ -558,36 +556,33 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, tickCursor(), true
 	case streamDeltaMsg:
-		if len(m.streamRounds) == 0 {
-			m.streamRounds = append(m.streamRounds, "")
-		}
-		m.streamRounds[len(m.streamRounds)-1] += string(msg)
-		// 不立即 refreshStreamViewport，由 streamFlushTick 60fps 合并刷新。
-		// LLM 高速流式期每秒数十 token，逐个刷新等于每秒数十次全量重渲 32 段。
+		m.stream.Append(string(msg))
+		// 不立即 refreshStreamViewport；只在有 delta 后排一次 active-only flush tick。
+		// LLM 高速流式期每秒数十 token，逐个刷新等于每秒数十次全量重渲。
 		m.streamDirty = true
-		return m, listenStream(m.runtime), true
+		cmd := listenStream(m.runtime)
+		if !m.streamFlushDue {
+			m.streamFlushDue = true
+			cmd = tea.Batch(cmd, tickStreamFlush())
+		}
+		return m, cmd, true
 	case streamClearMsg:
 		// round 边界：先把累积 delta 刷出去，新 round 才能视觉对齐
 		if m.flushStreamIfDirty() && m.streamScroll {
 			m.streamVP.GotoBottom()
 		}
-		if len(m.streamRounds) == 0 {
-			m.streamRounds = append(m.streamRounds, "")
-		} else if strings.TrimSpace(m.streamRounds[len(m.streamRounds)-1]) != "" {
-			m.streamRounds = append(m.streamRounds, "")
-		}
-		m.trimStreamRounds()
-		m.streamRound = len(m.streamRounds)
+		m.stream.StartRound()
 		m.refreshStreamViewport()
 		if m.streamScroll {
 			m.streamVP.GotoBottom()
 		}
 		return m, listenStream(m.runtime), true
 	case streamFlushTickMsg:
+		m.streamFlushDue = false
 		if m.flushStreamIfDirty() && m.streamScroll {
 			m.streamVP.GotoBottom()
 		}
-		return m, tickStreamFlush(), true
+		return m, nil, true
 	case quitResetMsg:
 		m.quitPending = false
 		return m, nil, true
@@ -691,16 +686,6 @@ func (m *Model) applyEvent(ev host.Event) {
 	}
 }
 
-// trimStreamRounds 把 streamRounds 截断到 maxStreamRounds 段；超出从头丢弃。
-// 调用时机：每次 streamClear 新开轮次后、replay 灌完所有历史项后。
-func (m *Model) trimStreamRounds() {
-	if len(m.streamRounds) <= maxStreamRounds {
-		return
-	}
-	drop := len(m.streamRounds) - maxStreamRounds
-	m.streamRounds = m.streamRounds[drop:]
-}
-
 func (m *Model) rebuildEventIndex() {
 	m.eventIndex = make(map[string]int, len(m.events))
 	for i, e := range m.events {
@@ -715,11 +700,11 @@ func (m *Model) resetOutputPanels() {
 	m.eventIndex = make(map[string]int)
 	m.viewport.SetContent("")
 	m.viewport.GotoTop()
-	m.streamBuf.Reset()
-	m.streamRounds = nil
+	m.stream.Reset()
+	m.streamDirty = false
+	m.streamFlushDue = false
 	m.streamVP.SetContent("")
 	m.streamVP.GotoTop()
-	m.streamRound = 0
 }
 
 func (m *Model) applyRuntimeReplay(items []domain.RuntimeQueueItem) {
@@ -730,24 +715,16 @@ func (m *Model) applyRuntimeReplay(items []domain.RuntimeQueueItem) {
 			// 等渲染所需字段未随 replay 还原，出来的行残缺不齐。宁可空面板也不要半截数据。
 			continue
 		case domain.RuntimeQueueStreamClear:
-			if len(m.streamRounds) == 0 {
-				m.streamRounds = append(m.streamRounds, "")
-			} else if strings.TrimSpace(m.streamRounds[len(m.streamRounds)-1]) != "" {
-				m.streamRounds = append(m.streamRounds, "")
-			}
+			m.stream.StartRound()
 		case domain.RuntimeQueueStreamDelta:
 			text := host.ReplayDeltaText(item)
 			if text == "" {
 				continue
 			}
-			if len(m.streamRounds) == 0 {
-				m.streamRounds = append(m.streamRounds, "")
-			}
-			m.streamRounds[len(m.streamRounds)-1] += text
+			m.stream.Append(text)
 		}
 	}
-	m.trimStreamRounds()
-	m.streamRound = len(m.streamRounds)
+	m.stream.Trim(maxStreamRounds)
 	m.refreshEventViewport()
 	m.refreshStreamViewport()
 }

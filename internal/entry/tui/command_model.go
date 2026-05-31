@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
@@ -159,32 +159,32 @@ func (s *modelSwitchState) apply(rt *host.Host) error {
 	return rt.SwitchModel(s.role(), s.provider(), s.model())
 }
 
-func (m Model) handleModelSwitchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleModelSwitchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.modelSwitch == nil {
 		return m, nil
 	}
 	state := m.modelSwitch
 
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch keyString(msg) {
+	case keyEsc:
 		m.modelSwitch = nil
 		if m.mode != modeDone {
 			return m, m.textarea.Focus()
 		}
 		return m, nil
-	case tea.KeyTab, tea.KeyDown:
+	case keyTab, keyDown:
 		state.moveFocus(1)
 		return m, nil
-	case tea.KeyShiftTab, tea.KeyUp:
+	case keyShiftTab, keyUp:
 		state.moveFocus(-1)
 		return m, nil
-	case tea.KeyLeft:
+	case keyLeft:
 		state.cycle(-1, m.runtime)
 		return m, nil
-	case tea.KeyRight:
+	case keyRight:
 		state.cycle(1, m.runtime)
 		return m, nil
-	case tea.KeyEnter:
+	case keyEnter:
 		if err := state.apply(m.runtime); err != nil {
 			state.message = err.Error()
 			return m, nil

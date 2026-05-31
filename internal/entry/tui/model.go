@@ -5,10 +5,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/voocel/ainovel-cli/internal/host"
 	"github.com/voocel/ainovel-cli/internal/tools"
@@ -66,19 +66,19 @@ type Model struct {
 	compActive     bool
 	snapshot       host.UISnapshot
 	events         []host.Event
-	eventIndex     map[string]int   // event.ID → m.events 下标；调用类事件到达时原地更新
-	viewport       viewport.Model   // 事件流 viewport
-	streamVP       viewport.Model   // 流式输出 viewport
-	detailVP       viewport.Model   // 右侧详情 viewport
-	stateVP        viewport.Model   // 左侧状态侧栏 viewport（可滚动）
-	streamBuf      *strings.Builder // 流式文本累积缓冲
-	streamRounds   []string
+	eventIndex     map[string]int // event.ID → m.events 下标；调用类事件到达时原地更新
+	viewport       viewport.Model // 事件流 viewport
+	streamVP       viewport.Model // 流式输出 viewport
+	detailVP       viewport.Model // 右侧详情 viewport
+	stateVP        viewport.Model // 左侧状态侧栏 viewport（可滚动）
+	stream         streamBuffer   // 流式文本 owner；delta 只追加到当前 round
 	textarea       textarea.Model
 	width          int
 	height         int
 	autoScroll     bool
 	streamScroll   bool      // 流式面板自动跟随
-	streamDirty    bool      // streamRounds 有未刷新的 delta；由 streamFlushTick 60fps 合并
+	streamDirty    bool      // stream 有未刷新的 delta；由 active-only flush tick 合并
+	streamFlushDue bool      // true 表示已有一次 flush tick 排队，避免 delta 反复排 tick
 	lastKeyAt      time.Time // 上次非 Enter 按键时间；KeyEnter 节流防粘贴 \n 流误触发提交
 	inputHistory   []string  // 已提交的输入历史（去重：相邻不重复）
 	historyIdx     int       // 当前浏览索引；== len(inputHistory) 表示"未浏览，正在编辑草稿"
@@ -94,7 +94,6 @@ type Model struct {
 	spinnerIdx     int
 	toolSpinnerIdx int  // 事件流进行中行的独立帧索引（150ms tick，不影响顶栏/星星）
 	cursorIdx      int  // 流式光标帧索引（独立 tick）
-	streamRound    int  // 流式输出轮次计数
 	quitPending    bool // 双次 Ctrl+C 退出确认
 	abortPending   bool // 等待 Done 回来的手动暂停
 	mouseOff       bool // true 时已禁用鼠标上报，让用户原生拖拽选中复制；再次切换恢复
@@ -103,6 +102,7 @@ type Model struct {
 // NewModel 创建 TUI Model。
 func NewModel(rt *host.Host, bridge *askUserBridge) Model {
 	ta := textarea.New()
+	ta.Prompt = ""
 	ta.Placeholder = placeholderForNewMode(startupModeQuick)
 	ta.CharLimit = 2000
 	ta.SetHeight(1)
@@ -115,17 +115,18 @@ func NewModel(rt *host.Host, bridge *askUserBridge) Model {
 	// 主动换行重绑到 ctrl+j（unix \n）和 alt+enter（GUI 习惯）。
 	// 终端协议层无法区分 Shift+Enter 与 Enter，所以不支持 Shift+Enter。
 	ta.KeyMap.InsertNewline.SetKeys("ctrl+j", "alt+enter")
+	ta.SetStyles(inputTextareaStyles())
 
-	vp := viewport.New(80, 20)
+	vp := newViewport(80, 20)
 	vp.SetContent("")
 
-	svp := viewport.New(80, 10)
+	svp := newViewport(80, 10)
 	svp.SetContent("")
 
-	dvp := viewport.New(40, 20)
+	dvp := newViewport(40, 20)
 	dvp.SetContent("")
 
-	stvp := viewport.New(32, 20)
+	stvp := newViewport(32, 20)
 	stvp.SetContent("")
 
 	return Model{
@@ -140,9 +141,24 @@ func NewModel(rt *host.Host, bridge *askUserBridge) Model {
 		streamVP:     svp,
 		detailVP:     dvp,
 		stateVP:      stvp,
-		streamBuf:    &strings.Builder{},
 		eventIndex:   make(map[string]int),
 	}
+}
+
+func inputTextareaStyles() textarea.Styles {
+	styles := textarea.DefaultStyles(terminalIsDark)
+	styles.Focused.CursorLine = lipgloss.NewStyle()
+	styles.Focused.Text = lipgloss.NewStyle().Foreground(bodyTextColor)
+	styles.Focused.Placeholder = lipgloss.NewStyle().Foreground(colorDim)
+	styles.Focused.Prompt = lipgloss.NewStyle()
+	styles.Focused.EndOfBuffer = lipgloss.NewStyle()
+	styles.Blurred.CursorLine = lipgloss.NewStyle()
+	styles.Blurred.Text = lipgloss.NewStyle().Foreground(bodyTextColor)
+	styles.Blurred.Placeholder = lipgloss.NewStyle().Foreground(colorDim)
+	styles.Blurred.Prompt = lipgloss.NewStyle()
+	styles.Blurred.EndOfBuffer = lipgloss.NewStyle()
+	styles.Cursor.Color = colorAccent
+	return styles
 }
 
 func (m Model) Init() tea.Cmd {
@@ -157,7 +173,6 @@ func (m Model) Init() tea.Cmd {
 		tickSpinner(),
 		tickToolSpinner(),
 		tickCursor(),
-		tickStreamFlush(),
 	)
 }
 
@@ -215,7 +230,7 @@ func (m *Model) hasRunningEvent() bool {
 	return false
 }
 
-// flushStreamIfDirty 将累积的 streamRounds 渲染到 viewport；mark 为已刷。
+// flushStreamIfDirty 将累积的 stream buffer 渲染到 viewport；mark 为已刷。
 // 返回是否真正刷了，便于调用方决定要不要 GotoBottom。
 func (m *Model) flushStreamIfDirty() bool {
 	if !m.streamDirty {
@@ -248,7 +263,7 @@ func (m *Model) refreshStreamViewport() {
 	if m.snapshot.IsRunning {
 		cursor = renderStreamCursor(m.cursorIdx)
 	}
-	m.streamVP.SetContent(renderStreamContent(m.streamRounds, m.streamVP.Width, cursor))
+	m.streamVP.SetContent(renderStreamContent(m.stream.Snapshot(), m.streamVP.Width(), cursor))
 }
 
 func (m *Model) refreshDetailViewport() {
@@ -275,15 +290,11 @@ func (m *Model) updateViewportSize() {
 	rightW := m.detailWidth()
 	bodyH := m.bodyHeight()
 	eventH, streamH := m.splitHeights(bodyH)
-	m.viewport.Width = centerW - 2
-	m.viewport.Height = eventH - 1 // -1 为 event panel header 行
-	m.streamVP.Width = centerW - 2
-	m.streamVP.Height = streamH - 1 // -1 为 stream panel header 行
-	m.detailVP.Width = rightW - 2
-	m.detailVP.Height = bodyH
+	resizeViewport(&m.viewport, centerW-2, eventH-1)  // -1 为 event panel header 行
+	resizeViewport(&m.streamVP, centerW-2, streamH-1) // -1 为 stream panel header 行
+	resizeViewport(&m.detailVP, rightW-2, bodyH)
 	leftW := m.sidebarWidth()
-	m.stateVP.Width = max(1, leftW-2)
-	m.stateVP.Height = max(1, bodyH-2) // -2 为状态栏 Padding(1,1) 的上下留白
+	resizeViewport(&m.stateVP, max(1, leftW-2), max(1, bodyH-2)) // -2 为状态栏 Padding(1,1) 的上下留白
 }
 
 // splitHeights 计算事件流和流式输出的高度分配。
@@ -558,7 +569,16 @@ func (m *Model) layoutHeights() (topH, inputH, bodyH int) {
 	return
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	v := tea.NewView(m.viewString())
+	v.AltScreen = true
+	if m.mode != modeNew && !m.mouseOff {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
+	return v
+}
+
+func (m Model) viewString() string {
 	if m.width == 0 || m.height == 0 {
 		return "加载中..."
 	}
@@ -602,13 +622,11 @@ func (m Model) View() string {
 		centerW := m.width - leftW - rightW
 		eventH, streamH := m.splitHeights(bodyH)
 
-		if m.viewport.Width != centerW-2 || m.viewport.Height != eventH-1 {
-			m.viewport.Width = centerW - 2
-			m.viewport.Height = eventH - 1 // -1 为 event panel header 行
+		if m.viewport.Width() != centerW-2 || m.viewport.Height() != eventH-1 {
+			resizeViewport(&m.viewport, centerW-2, eventH-1) // -1 为 event panel header 行
 		}
-		if m.streamVP.Width != centerW-2 || m.streamVP.Height != streamH-1 {
-			m.streamVP.Width = centerW - 2
-			m.streamVP.Height = streamH - 1 // -1 为 stream panel header 行
+		if m.streamVP.Width() != centerW-2 || m.streamVP.Height() != streamH-1 {
+			resizeViewport(&m.streamVP, centerW-2, streamH-1) // -1 为 stream panel header 行
 		}
 
 		eventFlow := renderEventFlowViewport(m.viewport, centerW, eventH, m.paneHighlighted(focusEvents))
@@ -644,7 +662,7 @@ func (m *Model) sendCoCreate() tea.Cmd {
 	return runCoCreate(m.runtime, m.cocreate)
 }
 
-func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleCoCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.cocreate == nil {
 		return m, nil
 	}
@@ -653,11 +671,11 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// 键盘 ↑↓/PgUp/PgDn/Home/End 滚动；Tab 在左对话栏 ↔ 右创作指令栏间切换滚动焦点
 	// （默认左栏，用户回看主体）。欢迎页已关鼠标上报以保留原生复制，右栏溢出时靠 Tab
 	// 切焦点后用键盘滚。左栏：上滚关 follow，滚到底重开 follow（流式跟随）。
-	switch msg.Type {
-	case tea.KeyTab:
+	switch keyString(msg) {
+	case keyTab:
 		state.focusPrompt = !state.focusPrompt
 		return m, nil
-	case tea.KeyUp, tea.KeyPgUp:
+	case keyUp, keyPgUp:
 		if state.focusPrompt {
 			var cmd tea.Cmd
 			state.promptVP, cmd = state.promptVP.Update(msg)
@@ -667,7 +685,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		state.convVP, cmd = state.convVP.Update(msg)
 		return m, cmd
-	case tea.KeyDown, tea.KeyPgDown:
+	case keyDown, keyPgDown:
 		if state.focusPrompt {
 			var cmd tea.Cmd
 			state.promptVP, cmd = state.promptVP.Update(msg)
@@ -679,7 +697,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			state.convFollow = true
 		}
 		return m, cmd
-	case tea.KeyHome:
+	case keyHome:
 		if state.focusPrompt {
 			state.promptVP.GotoTop()
 			return m, nil
@@ -687,7 +705,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		state.convFollow = false
 		state.convVP.GotoTop()
 		return m, nil
-	case tea.KeyEnd:
+	case keyEnd:
 		if state.focusPrompt {
 			state.promptVP.GotoBottom()
 			return m, nil
@@ -695,7 +713,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		state.convFollow = true
 		state.convVP.GotoBottom()
 		return m, nil
-	case tea.KeyEsc:
+	case keyEsc:
 		return m.exitCoCreate()
 	}
 
@@ -703,8 +721,8 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// 用户能在 AI 思考期间预输入下一句。提交类的屏蔽下沉到各 case 内部，
 	// 让 Enter 节流先于 awaiting 屏蔽——这样粘贴的 \n 残片仍能补空格。
 
-	switch msg.Type {
-	case tea.KeyCtrlS:
+	switch keyString(msg) {
+	case keyCtrlS:
 		if state.awaiting {
 			return m, nil
 		}
@@ -719,9 +737,9 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, startRuntime(m.runtime, plan)
 		}
 		return m, nil
-	case tea.KeyEnter:
+	case keyEnter:
 		// Alt+Enter → 主动换行，让 textarea.Update 接管（KeyMap.InsertNewline 已绑此键）
-		if msg.Alt {
+		if keyAlt(msg) {
 			break
 		}
 		// 与上一次字符按键间隔过短 → 视为粘贴流的 \n 残片：补空格代替提交。
@@ -729,7 +747,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// 导致 "abc\ndef" 被吞成 "abcdef"，与 base 路径语义不一致。
 		if !m.lastKeyAt.IsZero() && time.Since(m.lastKeyAt) < 50*time.Millisecond {
 			var cmd tea.Cmd
-			m.textarea, cmd = m.textarea.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+			m.textarea, cmd = m.textarea.Update(keyPressText(" "))
 			m.refitTextareaHeight()
 			return m, cmd
 		}
@@ -747,7 +765,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.refitTextareaHeight()
 		cmd := m.sendCoCreate()
 		return m, cmd
-	case tea.KeyCtrlU:
+	case keyCtrlU:
 		m.textarea.Reset()
 		m.refitTextareaHeight()
 		return m, nil
@@ -756,8 +774,8 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// 数字键 1/2/3 在 textarea 为空且有建议时 → 填入对应建议（不发送，可编辑）。
 	// 仅在空输入框时拦截，避免影响用户主动打数字。awaiting 时建议不展示，
 	// 这里也无需额外判断（state.suggestions 为空即跳过）。
-	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && !state.awaiting {
-		if r := msg.Runes[0]; r >= '1' && r <= '3' {
+	if keyText(msg) != "" && len(keyRunes(msg)) == 1 && !state.awaiting {
+		if r := keyRunes(msg)[0]; r >= '1' && r <= '3' {
 			if strings.TrimSpace(m.textarea.Value()) == "" {
 				if sugs := state.suggestions(); int(r-'0') <= len(sugs) {
 					m.textarea.SetValue(sugs[r-'1'])
@@ -769,14 +787,14 @@ func (m Model) handleCoCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// 常规输入转发给 textarea
-	if msg.Type == tea.KeyRunes && (containsSGRFragment(string(msg.Runes)) || isCSILeak(msg.Runes)) {
+	if keyText(msg) != "" && (containsSGRFragment(keyText(msg)) || isCSILeak(keyRunes(msg))) {
 		return m, nil
 	}
 	var ok bool
-	if msg, ok = cleanHumanKeyRunes(msg); !ok {
+	if msg, ok = cleanHumanKeyText(msg); !ok {
 		return m, nil
 	}
-	if msg.Type == tea.KeyRunes {
+	if keyText(msg) != "" {
 		m.lastKeyAt = time.Now()
 	}
 	var cmd tea.Cmd
@@ -798,7 +816,7 @@ func (m Model) exitCoCreate() (tea.Model, tea.Cmd) {
 	return m, m.textarea.Focus()
 }
 
-func (m Model) handleAskUserKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleAskUserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.askState == nil {
 		return m, nil
 	}
@@ -806,11 +824,11 @@ func (m Model) handleAskUserKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	q := state.currentQuestion()
 
 	if state.typing {
-		switch msg.Type {
-		case tea.KeyEsc:
+		switch keyString(msg) {
+		case keyEsc:
 			state.cancelCurrentTyping()
 			return m, nil
-		case tea.KeyEnter:
+		case keyEnter:
 			if state.finishCurrentAnswer() {
 				state.submit()
 				m.askState = nil
@@ -819,22 +837,22 @@ func (m Model) handleAskUserKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case keyBackspace, keyCtrlH:
 			if state.input != "" {
 				_, size := utf8.DecodeLastRuneInString(state.input)
 				state.input = state.input[:len(state.input)-size]
 			}
 			return m, nil
 		default:
-			if msg.Type == tea.KeyRunes {
-				state.input += utils.CleanInputRunes(msg.Runes)
+			if keyText(msg) != "" {
+				state.input += utils.CleanInputRunes(keyRunes(msg))
 			}
 			return m, nil
 		}
 	}
 
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch keyString(msg) {
+	case keyEsc:
 		// 关闭弹窗，返回空答案
 		state.request.resultCh <- askUserResult{
 			resp: &tools.AskUserResponse{
@@ -847,18 +865,18 @@ func (m Model) handleAskUserKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.textarea.Focus()
 		}
 		return m, nil
-	case tea.KeyUp:
+	case keyUp:
 		state.moveCursor(-1)
-	case tea.KeyDown:
+	case keyDown:
 		state.moveCursor(1)
-	case tea.KeySpace:
+	case keySpace:
 		if q.MultiSelect {
 			state.toggleSelection()
 			if state.cursor == len(q.Options) && !state.selected[state.cursor] {
 				state.input = ""
 			}
 		}
-	case tea.KeyEnter:
+	case keyEnter:
 		if q.MultiSelect {
 			if state.cursor == len(q.Options) {
 				state.toggleSelection()
@@ -906,9 +924,9 @@ func overlayAboveInput(base, overlay string, inputLineCount int) string {
 	return strings.Join(baseLines, "\n")
 }
 
-// isCSILeak 检测 KeyRunes 是否为 CSI 转义序列泄漏的残片。
+// isCSILeak 检测 Key.Text 是否为 CSI 转义序列泄漏的残片。
 // 终端发送方向键 \x1b[A 时，快速按键可能导致序列拆分：
-// \x1b 被解析为 Escape，"[" 或 "[A" 作为 KeyRunes 泄漏到 textarea。
+// \x1b 被解析为 Escape，"[" 或 "[A" 作为 Key.Text 泄漏到 textarea。
 func isCSILeak(runes []rune) bool {
 	if len(runes) == 0 || runes[0] != '[' {
 		return false
@@ -943,14 +961,13 @@ func containsSGRFragment(s string) bool {
 	return false
 }
 
-func cleanHumanKeyRunes(msg tea.KeyMsg) (tea.KeyMsg, bool) {
-	if msg.Type != tea.KeyRunes {
+func cleanHumanKeyText(msg tea.KeyPressMsg) (tea.KeyPressMsg, bool) {
+	if keyText(msg) == "" {
 		return msg, true
 	}
-	cleaned := utils.CleanInputRunes(msg.Runes)
+	cleaned := utils.CleanInputRunes(keyRunes(msg))
 	if cleaned == "" {
 		return msg, false
 	}
-	msg.Runes = []rune(cleaned)
-	return msg, true
+	return keyWithText(msg, cleaned), true
 }

@@ -1,6 +1,11 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+	"os"
+
+	"charm.land/lipgloss/v2"
+)
 
 // 主题色板 — 暖调书卷气
 // AdaptiveColor: Light = 亮底色值, Dark = 暗底色值
@@ -19,29 +24,35 @@ import "github.com/charmbracelet/lipgloss"
 //
 // AdaptiveColor 两端都必须给颜色值，没有"无色"档，所以这里启动时判一次背景，
 // 之后所有概览值/章节正文/命令描述等"中性正文"统一引用 bodyTextColor。
-var bodyTextColor lipgloss.TerminalColor = func() lipgloss.TerminalColor {
-	if lipgloss.HasDarkBackground() {
+var terminalIsDark = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
+
+func themeColor(light, dark string) color.Color {
+	return lipgloss.LightDark(terminalIsDark)(lipgloss.Color(light), lipgloss.Color(dark))
+}
+
+var bodyTextColor color.Color = func() color.Color {
+	if terminalIsDark {
 		return lipgloss.NoColor{}
 	}
 	return lipgloss.Color("#3d3529")
 }()
 
 var (
-	colorText    = lipgloss.AdaptiveColor{Light: "#3d3529", Dark: "#e8e0d0"}
-	colorDim     = lipgloss.AdaptiveColor{Light: "#8a7e6b", Dark: "#8a8175"}
-	colorMuted   = lipgloss.AdaptiveColor{Light: "#7a7060", Dark: "#b8b09c"}
-	colorAccent  = lipgloss.AdaptiveColor{Light: "#b8860b", Dark: "#e5b449"}
-	colorAccent2 = lipgloss.AdaptiveColor{Light: "#3d7a42", Dark: "#5fb8a3"}
-	colorRunning = lipgloss.AdaptiveColor{Light: "#6f8641", Dark: "#b5d075"}
-	colorSuccess = lipgloss.AdaptiveColor{Light: "#3d7a42", Dark: "#7ec488"}
-	colorError   = lipgloss.AdaptiveColor{Light: "#b5433a", Dark: "#e07060"}
-	colorReview  = lipgloss.AdaptiveColor{Light: "#b07530", Dark: "#e09b5a"}
-	colorContext = lipgloss.AdaptiveColor{Light: "#6b5a9e", Dark: "#a890d8"}
-	colorTool    = lipgloss.AdaptiveColor{Light: "#3a7a8a", Dark: "#7ec5d8"}
+	colorText    = themeColor("#3d3529", "#e8e0d0")
+	colorDim     = themeColor("#8a7e6b", "#8a8175")
+	colorMuted   = themeColor("#7a7060", "#b8b09c")
+	colorAccent  = themeColor("#b8860b", "#e5b449")
+	colorAccent2 = themeColor("#3d7a42", "#5fb8a3")
+	colorRunning = themeColor("#6f8641", "#b5d075")
+	colorSuccess = themeColor("#3d7a42", "#7ec488")
+	colorError   = themeColor("#b5433a", "#e07060")
+	colorReview  = themeColor("#b07530", "#e09b5a")
+	colorContext = themeColor("#6b5a9e", "#a890d8")
+	colorTool    = themeColor("#3a7a8a", "#7ec5d8")
 )
 
 // 状态标签颜色映射
-var statusColors = map[string]lipgloss.AdaptiveColor{
+var statusColors = map[string]color.Color{
 	"READY":    colorDim,
 	"PAUSING":  colorAccent,
 	"PAUSED":   colorAccent,
@@ -69,7 +80,7 @@ var statusDisplay = map[string]struct {
 }
 
 // 事件分类颜色映射
-var categoryColors = map[string]lipgloss.AdaptiveColor{
+var categoryColors = map[string]color.Color{
 	"DISPATCH": colorAccent,
 	"DONE":     colorSuccess,
 	"TOOL":     colorTool,

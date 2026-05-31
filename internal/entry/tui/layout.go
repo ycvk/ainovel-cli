@@ -2,9 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 )
 
@@ -28,7 +29,7 @@ func renderHighlightField(label, value string) string {
 //   - < 70%: green (healthy headroom)
 //   - 70-85%: yellow (approaching compression threshold)
 //   - > 85%: red (compression imminent or active)
-func contextPercentColor(percent float64) lipgloss.AdaptiveColor {
+func contextPercentColor(percent float64) color.Color {
 	switch {
 	case percent >= 85:
 		return colorError

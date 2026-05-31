@@ -5,8 +5,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
 )
+
+func assertNoRawUserControls(t *testing.T, label, rendered string, forbidden []string) {
+	t.Helper()
+	plain := termtext.StripSequences(rendered)
+	for _, seq := range forbidden {
+		if strings.Contains(plain, seq) {
+			t.Fatalf("%s contains raw user terminal control %q: %q", label, seq, rendered)
+		}
+	}
+}
+
+func assertRenderedContains(t *testing.T, label, rendered string, wants []string) {
+	t.Helper()
+	plain := termtext.StripSequences(rendered)
+	for _, want := range wants {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("%s missing %q: %q", label, want, rendered)
+		}
+	}
+}
 
 func TestWrapStreamTextSanitizesTerminalControls(t *testing.T) {
 	lines := wrapStreamText("正常\x1b[31m红色\x1b[0m\r覆盖\f结束\t列\x1b[2J尾", 80)
@@ -27,16 +48,8 @@ func TestWrapStreamTextSanitizesTerminalControls(t *testing.T) {
 func TestRenderStreamContentSanitizesAgentHeaderControls(t *testing.T) {
 	got := renderStreamContent([]string{"\x1b[33m✻ agent\x1b[0m\r\n任务\f说明\t尾"}, 80, "")
 
-	for _, forbidden := range []string{"\x1b", "\r", "\f", "\t"} {
-		if strings.Contains(got, forbidden) {
-			t.Fatalf("rendered stream content contains raw terminal control %q: %q", forbidden, got)
-		}
-	}
-	for _, want := range []string{"✻", "agent", "任务", "说明", "尾"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("rendered stream content missing %q: %q", want, got)
-		}
-	}
+	assertNoRawUserControls(t, "rendered stream content", got, []string{"\x1b", "\r", "\f", "\t"})
+	assertRenderedContains(t, "rendered stream content", got, []string{"✻", "agent", "任务", "说明", "尾"})
 }
 
 func TestRenderEventContentSanitizesSummaries(t *testing.T) {
@@ -49,16 +62,8 @@ func TestRenderEventContentSanitizesSummaries(t *testing.T) {
 	}
 
 	got := renderEventContent(events, 100, 0)
-	for _, forbidden := range []string{"\x1b", "\r", "\f", "\t", "\a"} {
-		if strings.Contains(got, forbidden) {
-			t.Fatalf("event content contains raw terminal control %q: %q", forbidden, got)
-		}
-	}
-	for _, want := range []string{"派发", "覆盖", `\f`, "工具", "系统", "链接", "用户", "下一行", "错误"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("event content missing %q: %q", want, got)
-		}
-	}
+	assertNoRawUserControls(t, "event content", got, []string{"\x1b", "\r", "\f", "\t", "\a"})
+	assertRenderedContains(t, "event content", got, []string{"派发", "覆盖", `\f`, "工具", "系统", "链接", "用户", "下一行", "错误"})
 }
 
 func TestRenderDetailContentSanitizesSnapshotText(t *testing.T) {
@@ -80,14 +85,6 @@ func TestRenderDetailContentSanitizesSnapshotText(t *testing.T) {
 		CompassScale:      "长篇\x1b[2J",
 	}, 100)
 
-	for _, forbidden := range []string{"\x1b", "\r", "\f"} {
-		if strings.Contains(got, forbidden) {
-			t.Fatalf("detail content contains raw terminal control %q: %q", forbidden, got)
-		}
-	}
-	for _, want := range []string{"标题", "覆盖", "角色", `\f`, "前提", "提交", "审阅", "摘要", "配角", "下一卷", "终局"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("detail content missing %q: %q", want, got)
-		}
-	}
+	assertNoRawUserControls(t, "detail content", got, []string{"\x1b", "\r", "\f"})
+	assertRenderedContains(t, "detail content", got, []string{"标题", "覆盖", "角色", `\f`, "前提", "提交", "审阅", "摘要", "配角", "下一卷", "终局"})
 }

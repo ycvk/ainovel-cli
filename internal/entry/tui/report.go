@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/voocel/ainovel-cli/internal/diag"
 	"github.com/voocel/ainovel-cli/internal/entry/termtext"
@@ -26,7 +26,7 @@ type reportState struct {
 func newReportState(width, height int, reqID int, startedAt time.Time) *reportState {
 	boxW, boxH := reportModalSize(width, height)
 	contentW := paddedModalContentWidth(boxW)
-	vp := viewport.New(contentW, boxH-4) // border 2 + padding 2
+	vp := newViewport(contentW, boxH-4) // border 2 + padding 2
 	state := &reportState{
 		reqID:     reqID,
 		loading:   true,
@@ -299,12 +299,12 @@ func renderReportModal(width, height int, state *reportState) string {
 	contentW := paddedModalContentWidth(boxW)
 
 	// 如果 viewport 尺寸变化了，更新
-	if state.viewport.Width != contentW {
-		state.viewport.Width = contentW
-		state.viewport.Height = boxH - 4
+	if state.viewport.Width() != contentW {
+		state.viewport.SetWidth(contentW)
+		state.viewport.SetHeight(boxH - 4)
 	}
-	if state.viewport.Height != boxH-4 {
-		state.viewport.Height = boxH - 4
+	if state.viewport.Height() != boxH-4 {
+		state.viewport.SetHeight(boxH - 4)
 	}
 	if state.renderW != contentW {
 		state.setContent(contentW)
@@ -320,27 +320,27 @@ func renderReportModal(width, height int, state *reportState) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
-func (m Model) handleReportKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleReportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.report == nil {
 		return m, nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch keyString(msg) {
+	case keyEsc:
 		m.report = nil
 		if m.mode != modeDone {
 			return m, m.textarea.Focus()
 		}
 		return m, nil
-	case tea.KeyUp:
+	case keyUp:
 		m.report.viewport.ScrollUp(1)
 		return m, nil
-	case tea.KeyDown:
+	case keyDown:
 		m.report.viewport.ScrollDown(1)
 		return m, nil
-	case tea.KeyPgUp:
+	case keyPgUp:
 		m.report.viewport.HalfPageUp()
 		return m, nil
-	case tea.KeyPgDown:
+	case keyPgDown:
 		m.report.viewport.HalfPageDown()
 		return m, nil
 	default:
