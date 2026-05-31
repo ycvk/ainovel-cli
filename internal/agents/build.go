@@ -62,7 +62,7 @@ func BuildCoordinator(
 
 	architectTools := []agentcore.Tool{
 		contextTool,
-		tools.NewSaveFoundationTool(store),
+		newArchitectSaveFoundationTool(store),
 	}
 	writerTools := []agentcore.Tool{
 		contextTool,
@@ -143,10 +143,10 @@ func BuildCoordinator(
 		MaxRetries:         subagentMaxRetries,
 		ToolsAreIdempotent: true,
 		OnMessage:          onMsg,
-		StopAfterToolResult: func(toolName string, result json.RawMessage) bool {
+		StopAfterToolResult: stopAfterFatalToolResult(func(toolName string, result json.RawMessage) bool {
 			r := decodeSaveFoundationResult(toolName, result)
 			return r.Type == "outline" && r.FoundationReady
-		},
+		}),
 		StopGuardFactory: architectStopGuardFactory,
 	}
 	architectLong := subagent.Config{
@@ -159,7 +159,7 @@ func BuildCoordinator(
 		MaxRetries:         subagentMaxRetries,
 		ToolsAreIdempotent: true,
 		OnMessage:          onMsg,
-		StopAfterToolResult: func(toolName string, result json.RawMessage) bool {
+		StopAfterToolResult: stopAfterFatalToolResult(func(toolName string, result json.RawMessage) bool {
 			r := decodeSaveFoundationResult(toolName, result)
 			switch r.Type {
 			case "update_compass", "expand_arc", "complete_book":
@@ -167,7 +167,7 @@ func BuildCoordinator(
 			default:
 				return false
 			}
-		},
+		}),
 		StopGuardFactory: architectStopGuardFactory,
 	}
 
@@ -241,7 +241,7 @@ func BuildCoordinator(
 		},
 	}
 
-	subagentTool := subagent.New(architectShort, architectLong, writer, editor)
+	subagentTool := failOnFatalSubagentResult(subagent.New(architectShort, architectLong, writer, editor))
 
 	coordinatorEngine := newContextManager(contextManagerConfig{
 		Model:            coordinatorModel,
