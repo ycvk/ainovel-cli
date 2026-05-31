@@ -17,8 +17,11 @@ type (
 	eventMsg       host.Event
 	snapshotMsg    host.UISnapshot
 	doneMsg        struct{ complete bool } // complete=true 全书完成，false 出错停止
-	abortResultMsg struct{ stopped bool }
-	bootstrapMsg   struct {
+	abortResultMsg struct {
+		stopped bool
+		err     error
+	}
+	bootstrapMsg struct {
 		replay  []domain.RuntimeQueueItem
 		resumed bool
 		err     error
@@ -45,7 +48,7 @@ type (
 		reply host.CoCreateReply
 		err   error
 	}
-	steerResultMsg     struct{}
+	steerResultMsg     struct{ err error }
 	continueResultMsg  struct{ err error }
 	spinnerTickMsg     time.Time
 	toolSpinnerTickMsg time.Time // 事件流工具 spinner 独立 tick（更快、独立于顶栏/星星）
@@ -173,8 +176,8 @@ func listenCoCreateDone(state *cocreateState) tea.Cmd {
 
 func steerRuntime(rt *host.Host, text string) tea.Cmd {
 	return func() tea.Msg {
-		rt.Steer(text)
-		return steerResultMsg{}
+		err := rt.Steer(text)
+		return steerResultMsg{err: err}
 	}
 }
 
@@ -187,7 +190,8 @@ func continueRuntime(rt *host.Host, text string) tea.Cmd {
 
 func abortRuntime(rt *host.Host) tea.Cmd {
 	return func() tea.Msg {
-		return abortResultMsg{stopped: rt.Abort()}
+		stopped, err := rt.Abort()
+		return abortResultMsg{stopped: stopped, err: err}
 	}
 }
 

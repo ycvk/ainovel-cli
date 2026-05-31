@@ -293,18 +293,25 @@ func (c Config) ResolveContextWindow(modelName string) (int, ContextWindowSource
 }
 
 // LogContextWindowChoice 打印某个角色的窗口决策。source=default 时发 Warn 提示
-// 该模型未在 registry 命中（OpenRouter 也未收录），后续上下文压缩会按 128k 兜底
+// 该模型未在 registry 命中（OpenRouter 也未收录），后续上下文压缩会按默认窗口兜底
 // 触发——若模型实际窗口更大，长篇可能被提前压缩、丢史。
 func LogContextWindowChoice(role, model string, window int, source ContextWindowSource) {
 	attrs := []any{"module", "context", "role", role, "model", model, "window", window, "source", source}
 	switch source {
 	case CtxWindowDefault:
-		slog.Warn("未识别的模型，使用 128k 兜底窗口（自定义代理或 OpenRouter 未收录）", attrs...)
+		slog.Warn(fmt.Sprintf("未识别的模型，使用 %s 兜底窗口（自定义代理或 OpenRouter 未收录）", contextWindowLabel(window)), attrs...)
 	case CtxWindowCapped:
 		slog.Info("上下文窗口（已被 compact_window 上限收紧）", attrs...)
 	default:
 		slog.Info("上下文窗口", attrs...)
 	}
+}
+
+func contextWindowLabel(window int) string {
+	if window > 0 && window%1000 == 0 {
+		return fmt.Sprintf("%dk", window/1000)
+	}
+	return fmt.Sprintf("%d token", window)
 }
 
 // CandidateModels 返回某个 provider 下可供切换的模型列表。

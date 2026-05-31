@@ -59,7 +59,10 @@ func (s *CharacterStore) LoadSnapshots(volume, arc int) ([]domain.CharacterSnaps
 
 // LoadLatestSnapshots 加载最近一次角色快照（按卷弧倒序查找）。
 func (s *CharacterStore) LoadLatestSnapshots() ([]domain.CharacterSnapshot, error) {
-	volumes, _ := s.outline.LoadLayeredOutline()
+	volumes, err := s.outline.LoadLayeredOutline()
+	if err != nil {
+		return nil, fmt.Errorf("load layered_outline: %w", err)
+	}
 	if len(volumes) == 0 {
 		return nil, nil
 	}

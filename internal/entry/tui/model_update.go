@@ -456,6 +456,14 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime)), true
 	case abortResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.applyEvent(host.Event{
+				Time: time.Now(), Category: "ERROR", Summary: msg.err.Error(), Level: "error",
+			})
+			m.refreshEventViewport()
+			return m, fetchSnapshot(m.runtime), true
+		}
 		if msg.stopped {
 			m.abortPending = true
 			m.textarea.Placeholder = "正在暂停创作..."
@@ -503,6 +511,14 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		next, cmd := m.handleCoCreateDoneMsg(msg)
 		return next, cmd, true
 	case steerResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.applyEvent(host.Event{
+				Time: time.Now(), Category: "ERROR", Summary: msg.err.Error(), Level: "error",
+			})
+			m.refreshEventViewport()
+			return m, fetchSnapshot(m.runtime), true
+		}
 		return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime)), true
 	case continueResultMsg:
 		if msg.err != nil {

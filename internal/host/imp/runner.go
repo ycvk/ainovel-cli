@@ -67,7 +67,12 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 		emit(StageSplitting, 0, total, fmt.Sprintf("切分完成：%d 章", total), nil)
 
 		// ── 2. Foundation 反推（已完整时跳过）──
-		if needsFoundation(deps.Store, opts) {
+		needFoundation, err := needsFoundation(deps.Store, opts)
+		if err != nil {
+			emit(StageError, 0, total, "Foundation 状态检查失败", err)
+			return
+		}
+		if needFoundation {
 			emit(StageFoundation, 0, total, "反推 Foundation 中（一次 LLM 调用）...", nil)
 			fr, err := ReverseFoundation(ctx, deps.LLM, deps.Prompts.Foundation, chapters)
 			if err != nil {
@@ -88,8 +93,16 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 		}
 
 		// ── 3. 章节循环 ──
-		premise, _ := deps.Store.Outline.LoadPremise()
-		charactersBlock := loadCharactersBlock(deps.Store)
+		premise, err := deps.Store.Outline.LoadPremise()
+		if err != nil {
+			emit(StageError, 0, total, "读取 premise 失败", err)
+			return
+		}
+		charactersBlock, err := loadCharactersBlock(deps.Store)
+		if err != nil {
+			emit(StageError, 0, total, "读取角色档案失败", err)
+			return
+		}
 
 		startIdx := 0
 		if opts.ResumeFrom > 1 {
@@ -104,14 +117,23 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 			ch := chapters[i]
 
 			// 已完成 → 跳过 LLM
-			if deps.Store.Progress.IsChapterCompleted(chNum) {
+			completed, err := deps.Store.Progress.IsChapterCompleted(chNum)
+			if err != nil {
+				emit(StageError, chNum, total, fmt.Sprintf("第 %d 章读取进度失败", chNum), err)
+				return
+			}
+			if completed {
 				emit(StageChapter, chNum, total, fmt.Sprintf("第 %d 章已完成，跳过", chNum), nil)
 				continue
 			}
 
 			emit(StageChapter, chNum, total, fmt.Sprintf("分析第 %d/%d 章：%s", chNum, total, ch.Title), nil)
 
-			activeHooks, _ := deps.Store.World.LoadActiveForeshadow()
+			activeHooks, err := deps.Store.World.LoadActiveForeshadow()
+			if err != nil {
+				emit(StageError, chNum, total, fmt.Sprintf("第 %d 章读取伏笔失败", chNum), err)
+				return
+			}
 			analysis, err := AnalyzeChapter(ctx, deps.LLM, deps.Prompts.Analyzer,
 				chNum, ch.Title, ch.Content, premise, charactersBlock, activeHooks)
 			if err != nil {
@@ -133,12 +155,13 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 }
 
 // needsFoundation 判断是否需要重新反推 foundation。
-// 用户显式 ResumeFrom > 1 视为"接着导入"，跳过反推；否则按 Store 状态判断。
-func needsFoundation(st *store.Store, opts Options) bool {
-	if opts.ResumeFrom > 1 {
-		return false
+// ResumeFrom 只控制章节循环起点，不绕过 foundation 完整性约束。
+func needsFoundation(st *store.Store, _ Options) (bool, error) {
+	missing, err := st.FoundationMissing()
+	if err != nil {
+		return false, err
 	}
-	return len(st.FoundationMissing()) > 0
+	return len(missing) > 0, nil
 }
 
 // pickScale 根据章数给规划级别一个合理的初值；short ≤25, mid ≤80, 否则 long。
@@ -156,16 +179,19 @@ func pickScale(total int) domain.PlanningTier {
 
 // loadCharactersBlock 把角色档案渲染成简短文本块（name/role + 一句描述），
 // 仅供 LLM 上下文参考，不需要严格结构。
-func loadCharactersBlock(st *store.Store) string {
+func loadCharactersBlock(st *store.Store) (string, error) {
 	chars, err := st.Characters.Load()
-	if err != nil || len(chars) == 0 {
-		return ""
+	if err != nil {
+		return "", err
+	}
+	if len(chars) == 0 {
+		return "", nil
 	}
 	var sb strings.Builder
 	for _, c := range chars {
 		fmt.Fprintf(&sb, "- **%s**（%s）：%s\n", c.Name, c.Role, oneLine(c.Description))
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 func oneLine(s string) string {

@@ -132,12 +132,12 @@ func (s *ProgressStore) StartChapter(chapter int) error {
 }
 
 // IsChapterCompleted 检查章节是否已提交完成。
-func (s *ProgressStore) IsChapterCompleted(chapter int) bool {
+func (s *ProgressStore) IsChapterCompleted(chapter int) (bool, error) {
 	p, err := s.Load()
 	if err != nil || p == nil {
-		return false
+		return false, err
 	}
-	return slices.Contains(p.CompletedChapters, chapter)
+	return slices.Contains(p.CompletedChapters, chapter), nil
 }
 
 // MarkChapterComplete 标记章节完成，原子性更新进度。

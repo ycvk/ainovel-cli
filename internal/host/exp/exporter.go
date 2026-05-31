@@ -91,13 +91,22 @@ func Run(ctx context.Context, deps Deps, opts Options) (*Result, error) {
 		bodies[ch] = text
 	}
 
-	outline, _ := deps.Store.Outline.LoadOutline()
+	outline, err := deps.Store.Outline.LoadOutline()
+	if err != nil {
+		return nil, fmt.Errorf("读取大纲失败：%w", err)
+	}
 	var volumes []domain.VolumeOutline
 	if progress.Layered {
-		volumes, _ = deps.Store.Outline.LoadLayeredOutline()
+		volumes, err = deps.Store.Outline.LoadLayeredOutline()
+		if err != nil {
+			return nil, fmt.Errorf("读取分层大纲失败：%w", err)
+		}
 	}
 
-	premise, _ := deps.Store.Outline.LoadPremise()
+	premise, err := deps.Store.Outline.LoadPremise()
+	if err != nil {
+		return nil, fmt.Errorf("读取故事前提失败：%w", err)
+	}
 
 	outPath := opts.OutPath
 	if outPath == "" {

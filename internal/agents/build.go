@@ -53,7 +53,7 @@ func BuildCoordinator(
 	models *bootstrap.ModelSet,
 	bundle assets.Bundle,
 	recordUsage UsageRecorder,
-) (*agentcore.Agent, *tools.AskUserTool, *ctxpack.WriterRestorePack, *corecontext.ContextEngine, *flow.Dispatcher) {
+) (*agentcore.Agent, *tools.AskUserTool, *ctxpack.WriterRestorePack, *corecontext.ContextEngine, *flow.Dispatcher, error) {
 	// 共享工具
 	rulesOpts := rules.DefaultOptions(bundle.RulesFS)
 	contextTool := tools.NewContextTool(store, bundle.References, cfg.Style, rulesOpts)
@@ -177,7 +177,9 @@ func BuildCoordinator(
 	}
 
 	restore := &ctxpack.WriterRestorePack{}
-	restore.Refresh(store)
+	if err := restore.Refresh(store); err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("refresh writer restore pack: %w", err)
+	}
 
 	writer := subagent.Config{
 		Name:               "writer",
@@ -266,7 +268,7 @@ func BuildCoordinator(
 		agentcore.WithStopGuard(reminder.NewStopGuard(store, nil)),
 	)
 	flowDispatcher.Bind(agent)
-	return agent, askUser, restore, coordinatorEngine, flowDispatcher
+	return agent, askUser, restore, coordinatorEngine, flowDispatcher, nil
 }
 
 type saveFoundationResult struct {

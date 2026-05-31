@@ -69,7 +69,7 @@ Architect 和 Editor 使用各自的 stop guard，不挂 Writer 专用 store sum
 
 - `internal/agents/ctxpack/restore.go`
 
-`WriterRestorePack` 在 Host 生命周期关键点刷新当前章节所需上下文，并在 FullSummary 后通过 `PostSummaryHook` 注入 `<post-compact-context>`。Hook 本身不做 IO，只读内存缓存，避免压缩路径里再引入 Store 读写不确定性。
+`WriterRestorePack` 在 Host 生命周期关键点刷新当前章节所需上下文，并在 FullSummary 后通过 `PostSummaryHook` 注入 `<post-compact-context>`。刷新失败会显式返回错误并阻断恢复；Hook 本身不做 IO，只读内存缓存，避免压缩路径里再引入 Store 读写不确定性。
 
 ### 2.5 结构化上下文工具
 
@@ -144,6 +144,7 @@ reserve 由 `bootstrap.CompactReserveTokens(window)` 计算：
 - `kept`
 
 更完整的排障路径见 `docs/observability.md`。
+运行时生命周期与恢复边界见 `docs/runtime-and-recovery.md`。
 
 ## 7. 维护规则
 

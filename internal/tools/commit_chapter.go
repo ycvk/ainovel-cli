@@ -118,13 +118,26 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	if a.Chapter <= 0 {
 		return nil, fmt.Errorf("chapter must be > 0: %w", errs.ErrToolArgs)
 	}
-	if t.store.Progress.IsChapterCompleted(a.Chapter) {
+	completed, err := t.store.Progress.IsChapterCompleted(a.Chapter)
+	if err != nil {
+		return nil, fmt.Errorf("check chapter completion: %w: %w", errs.ErrStoreRead, err)
+	}
+	if completed {
 		// 清理可能残留的 PendingCommit（崩溃发生在 ProgressMarked 之后、ClearPendingCommit 之前）
-		if pending, _ := t.store.Signals.LoadPendingCommit(); pending != nil && pending.Chapter == a.Chapter {
-			_ = t.store.Signals.ClearPendingCommit()
+		pending, err := t.store.Signals.LoadPendingCommit()
+		if err != nil {
+			return nil, fmt.Errorf("load pending commit: %w: %w", errs.ErrStoreRead, err)
+		}
+		if pending != nil && pending.Chapter == a.Chapter {
+			if err := t.store.Signals.ClearPendingCommit(); err != nil {
+				return nil, fmt.Errorf("clear pending commit: %w: %w", errs.ErrStoreWrite, err)
+			}
 		}
 		// 打磨/重写路径：章节虽已完成，但仍在 pending_rewrites 中，允许覆盖并 drain 队列
-		progress, _ := t.store.Progress.Load()
+		progress, err := t.store.Progress.Load()
+		if err != nil {
+			return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
+		}
 		if progress != nil && slices.Contains(progress.PendingRewrites, a.Chapter) {
 			return t.executeRewriteCommit(a.Chapter, a.Summary, a.Characters, a.KeyEvents,
 				a.HookType, a.DominantStrand, progress)
@@ -274,7 +287,9 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		needsNewVolume = boundary.NeedsNewVolume
 		nextVol = boundary.NextVolume
 		nextArc = boundary.NextArc
-		_ = t.store.Progress.UpdateVolumeArc(vol, arc)
+		if err := t.store.Progress.UpdateVolumeArc(vol, arc); err != nil {
+			return nil, fmt.Errorf("update progress volume arc: %w: %w", errs.ErrStoreWrite, err)
+		}
 	}
 
 	var reviewRequired bool
@@ -307,10 +322,18 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	}
 
 	// 8. 完成态判定：非分层写完最后一章 / 分层最终卷最后一章 → MarkComplete
-	if t.applyCompletion(&result, progress) {
+	bookComplete, err := t.applyCompletion(&result, progress)
+	if err != nil {
+		return nil, err
+	}
+	if bookComplete {
 		result.BookComplete = true
 	}
-	if p, _ := t.store.Progress.Load(); p != nil {
+	p, err := t.store.Progress.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
+	}
+	if p != nil {
 		result.Flow = string(p.Flow)
 	}
 
@@ -506,13 +529,15 @@ func loadCoreCharacterNameSet(s *store.Store) map[string]bool {
 
 // applyCompletion 仅处理非分层模式：写完约定总章数 → MarkComplete。
 // 分层模式的全书完结统一走 architect 显式调用 save_foundation type=complete_book。
-func (t *CommitChapterTool) applyCompletion(result *domain.CommitResult, progress *domain.Progress) bool {
+func (t *CommitChapterTool) applyCompletion(result *domain.CommitResult, progress *domain.Progress) (bool, error) {
 	if progress == nil || progress.Layered {
-		return false
+		return false, nil
 	}
 	if progress.TotalChapters > 0 && result.NextChapter > progress.TotalChapters {
-		_ = t.store.Progress.MarkComplete()
-		return true
+		if err := t.store.Progress.MarkComplete(); err != nil {
+			return false, fmt.Errorf("mark complete: %w: %w", errs.ErrStoreWrite, err)
+		}
+		return true, nil
 	}
-	return false
+	return false, nil
 }

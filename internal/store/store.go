@@ -97,26 +97,51 @@ func (s *Store) CheckConsistency() []string {
 
 // FoundationMissing 返回基础设定中尚缺的项，按用于 Prompt/Reminder 的稳定顺序排列。
 // 长篇模式（已有 layered_outline）额外要求 compass。
-func (s *Store) FoundationMissing() []string {
+// 读取失败必须显式返回错误；只有文件不存在才表示对应事实缺失。
+func (s *Store) FoundationMissing() ([]string, error) {
 	var missing []string
-	if p, _ := s.Outline.LoadPremise(); p == "" {
+	premise, err := s.Outline.LoadPremise()
+	if err != nil {
+		return nil, fmt.Errorf("load premise: %w", err)
+	}
+	if premise == "" {
 		missing = append(missing, "premise")
 	}
-	if o, _ := s.Outline.LoadOutline(); len(o) == 0 {
+	outline, err := s.Outline.LoadOutline()
+	if err != nil {
+		return nil, fmt.Errorf("load outline: %w", err)
+	}
+	if len(outline) == 0 {
 		missing = append(missing, "outline")
 	}
-	if c, _ := s.Characters.Load(); len(c) == 0 {
+	characters, err := s.Characters.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load characters: %w", err)
+	}
+	if len(characters) == 0 {
 		missing = append(missing, "characters")
 	}
-	if r, _ := s.World.LoadWorldRules(); len(r) == 0 {
+	rules, err := s.World.LoadWorldRules()
+	if err != nil {
+		return nil, fmt.Errorf("load world_rules: %w", err)
+	}
+	if len(rules) == 0 {
 		missing = append(missing, "world_rules")
 	}
-	if layered, _ := s.Outline.LoadLayeredOutline(); len(layered) > 0 {
-		if c, _ := s.Outline.LoadCompass(); c == nil {
+	layered, err := s.Outline.LoadLayeredOutline()
+	if err != nil {
+		return nil, fmt.Errorf("load layered_outline: %w", err)
+	}
+	if len(layered) > 0 {
+		compass, err := s.Outline.LoadCompass()
+		if err != nil {
+			return nil, fmt.Errorf("load compass: %w", err)
+		}
+		if compass == nil {
 			missing = append(missing, "compass")
 		}
 	}
-	return missing
+	return missing, nil
 }
 
 // Init 创建所需的子目录结构。

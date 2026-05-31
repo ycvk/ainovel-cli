@@ -105,7 +105,11 @@ func New(cfg bootstrap.Config, bundle assets.Bundle) (*Host, error) {
 	usageCtx, usageCancel := context.WithCancel(context.Background())
 	usage.StartAutoSave(usageCtx)
 
-	coordinator, askUser, restore, coordinatorCtxMgr, router := agents.BuildCoordinator(cfg, store, models, bundle, usage.Record)
+	coordinator, askUser, restore, coordinatorCtxMgr, router, err := agents.BuildCoordinator(cfg, store, models, bundle, usage.Record)
+	if err != nil {
+		usageCancel()
+		return nil, fmt.Errorf("build coordinator: %w", err)
+	}
 	store.Signals.ClearStaleSignals()
 
 	h := &Host{
@@ -162,7 +166,9 @@ func (h *Host) StartPrepared(promptText string) error {
 	}
 
 	slog.Info("开始创作", "module", "host", "prompt_len", len(promptText))
-	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "开始创作", Level: "info"})
+	if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "开始创作", Level: "info"}); err != nil {
+		return fmt.Errorf("emit start event: %w", err)
+	}
 	h.observer.setAborting(false)
 	// 先重置去重并启用路由，再启动 Prompt，避免首轮事件先于 Enable 抵达
 	h.router.ResetDedupe()
@@ -202,12 +208,18 @@ func (h *Host) Resume() (string, error) {
 	}
 
 	slog.Info("恢复创作", "module", "host", "label", label)
-	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "恢复创作: " + label, Level: "info"})
+	if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "恢复创作: " + label, Level: "info"}); err != nil {
+		return "", fmt.Errorf("emit resume event: %w", err)
+	}
 	for _, w := range h.store.CheckConsistency() {
 		slog.Warn("一致性告警", "module", "host", "detail", w)
-		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "一致性告警: " + w, Level: "warn"})
+		if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "一致性告警: " + w, Level: "warn"}); err != nil {
+			return "", fmt.Errorf("emit consistency warning event: %w", err)
+		}
 	}
-	h.refreshWriterRestore()
+	if err := h.refreshWriterRestore(); err != nil {
+		return "", fmt.Errorf("refresh writer restore: %w", err)
+	}
 	h.observer.setAborting(false)
 	h.router.ResetDedupe()
 	h.router.Enable()
@@ -237,14 +249,18 @@ func (h *Host) Continue(text string) error {
 	running := h.lifecycle == lifecycleRunning
 	h.mu.Unlock()
 
-	h.emitEvent(Event{Time: time.Now(), Category: "USER", Summary: "[继续] " + text, Level: "info"})
+	if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "USER", Summary: "[继续] " + text, Level: "info"}); err != nil {
+		return fmt.Errorf("emit continue event: %w", err)
+	}
 
 	if running {
 		h.coordinator.FollowUp(agentcore.UserMsg(text))
 		return nil
 	}
 	// 停机后 → 注入并自动恢复
-	h.refreshWriterRestore()
+	if err := h.refreshWriterRestore(); err != nil {
+		return fmt.Errorf("refresh writer restore: %w", err)
+	}
 	h.observer.setAborting(false)
 	_, err := h.coordinator.Inject(agentcore.UserMsg(text))
 	if err != nil {
@@ -258,27 +274,34 @@ func (h *Host) Continue(text string) error {
 }
 
 // Steer 提交用户干预。
-func (h *Host) Steer(text string) {
+func (h *Host) Steer(text string) error {
 	h.mu.Lock()
 	running := h.lifecycle == lifecycleRunning
 	h.mu.Unlock()
 
-	h.emitEvent(Event{Time: time.Now(), Category: "USER", Summary: "[用户干预] " + text, Level: "info"})
+	if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "USER", Summary: "[用户干预] " + text, Level: "info"}); err != nil {
+		return fmt.Errorf("emit steer event: %w", err)
+	}
 
 	msg := agentcore.UserMsg("[用户干预] " + text)
 	if running {
 		if _, err := h.coordinator.Inject(msg); err != nil {
-			slog.Error("steer inject 失败", "module", "host", "err", err)
+			return fmt.Errorf("steer inject: %w", err)
 		}
-		return
+		return nil
 	}
 	// 停机：持久化待下次启动 + 反馈系统状态（"已保存"是 USER 事件之外的系统提示）
-	_ = h.store.RunMeta.SetPendingSteer(text)
-	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "干预已保存，下次启动时生效", Level: "info"})
+	if err := h.store.RunMeta.SetPendingSteer(text); err != nil {
+		return fmt.Errorf("save pending steer: %w", err)
+	}
+	if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "干预已保存，下次启动时生效", Level: "info"}); err != nil {
+		return fmt.Errorf("emit pending steer event: %w", err)
+	}
+	return nil
 }
 
 // Abort 暂停当前 coordinator。
-func (h *Host) Abort() bool {
+func (h *Host) Abort() (bool, error) {
 	h.mu.Lock()
 	running := h.lifecycle == lifecycleRunning
 	if running {
@@ -286,14 +309,16 @@ func (h *Host) Abort() bool {
 	}
 	h.mu.Unlock()
 	if !running {
-		return false
+		return false, nil
 	}
 	// 置位必须在 coordinator.Abort 之前：cancel 传播会立刻引发 stream init / subagent
 	// 失败事件，observer 凭此标志识别为 abort 衍生噪声并抑制。
 	h.observer.setAborting(true)
 	h.coordinator.Abort()
-	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "用户手动暂停当前创作", Level: "warn"})
-	return true
+	if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "用户手动暂停当前创作", Level: "warn"}); err != nil {
+		return true, fmt.Errorf("emit abort event: %w", err)
+	}
+	return true, nil
 }
 
 // Close 终止 coordinator 并关闭事件通道。
@@ -326,7 +351,7 @@ func (h *Host) Close() {
 //   - 其它            → 标记 idle，发"Coordinator 停止"事件
 //
 // 用户要继续创作只有两条路径：手动 Continue（停机注入）或重启进程走 Resume。
-// 见 docs/architecture.md §13.3、§8.3。
+// 相关恢复与排障入口见 docs/context-management.md 和 docs/observability.md。
 func (h *Host) waitDone() {
 	h.coordinator.WaitForIdle()
 	h.observer.finalize()
@@ -338,7 +363,9 @@ func (h *Host) waitDone() {
 		summary := fmt.Sprintf("创作完成: %d 章 %d 字", len(progress.CompletedChapters), progress.TotalWordCount)
 		h.mu.Unlock()
 		slog.Info(summary, "module", "host")
-		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "success"})
+		if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "success"}); err != nil {
+			slog.Error("runtime queue 事件持久化失败", "module", "host", "summary", summary, "err", err)
+		}
 	} else {
 		wasRunning := h.lifecycle == lifecycleRunning
 		if wasRunning {
@@ -352,7 +379,9 @@ func (h *Host) waitDone() {
 		if wasRunning {
 			summary := fmt.Sprintf("Coordinator 停止 (已完成 %d 章)", completed)
 			slog.Warn(summary, "module", "host")
-			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "warn"})
+			if err := h.emitDurableEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "warn"}); err != nil {
+				slog.Error("runtime queue 事件持久化失败", "module", "host", "summary", summary, "err", err)
+			}
 		}
 	}
 
@@ -727,7 +756,7 @@ func (h *Host) SwitchModel(role, provider, model string) error {
 			slog.Warn("保存配置失败", "module", "host", "err", err)
 		}
 	}
-	// 切到未登记模型时打一行 warn，提示用户走了 128k 兜底——长篇容易被提前压缩。
+	// 切到未登记模型时打一行 warn，提示用户走了默认兜底窗口——长篇容易被提前压缩。
 	logRole := role
 	if logRole == "" {
 		logRole = "default"
@@ -737,8 +766,8 @@ func (h *Host) SwitchModel(role, provider, model string) error {
 
 	// 切到 default/coordinator 时，联动 coordinator engine 的窗口与 reserve。
 	// writer/architect/editor 走 ContextManagerFactory 自动按新模型重建，不需要联动。
-	// 不联动会导致：1M→128k 切换时 coordinator engine 仍按 1M 算 threshold，
-	// 累积 messages 超过 128k 就 API 报错；128k→1M 时阈值被钉在 96k，浪费长上下文。
+	// 不联动会导致：大窗口→小窗口切换时 coordinator engine 仍按旧窗口算 threshold，
+	// 累积 messages 超过实际窗口就 API 报错；小窗口→大窗口时阈值被钉在旧值，浪费长上下文。
 	//
 	// 关键：必须用 models.CurrentSelection("coordinator") 拿"coordinator 实际使用"的模型
 	// 算窗口——而不是直接用切换目标的 model。当用户配了 roles.coordinator 单独模型时，
@@ -758,12 +787,14 @@ func (h *Host) SwitchModel(role, provider, model string) error {
 		}
 	}
 
-	h.emitEvent(Event{
+	if err := h.emitDurableEvent(Event{
 		Time:     time.Now(),
 		Category: "SYSTEM",
 		Summary:  fmt.Sprintf("模型已切换：%s → %s/%s", role, provider, model),
 		Level:    "info",
-	})
+	}); err != nil {
+		return fmt.Errorf("emit model switch event: %w", err)
+	}
 	return nil
 }
 
@@ -784,10 +815,11 @@ func (h *Host) CoCreateStream(ctx context.Context, history []CoCreateMessage, on
 
 // ── 工具 ──
 
-func (h *Host) refreshWriterRestore() {
+func (h *Host) refreshWriterRestore() error {
 	if h.writerRestore != nil {
-		h.writerRestore.Refresh(h.store)
+		return h.writerRestore.Refresh(h.store)
 	}
+	return nil
 }
 
 func truncate(s string, maxRunes int) string {

@@ -139,7 +139,9 @@ func RunSetup() (Config, error) {
 	}
 
 	// 生成注释模板
-	saveExampleConfig()
+	if err := saveExampleConfig(); err != nil {
+		return cfg, fmt.Errorf("save example config: %w", err)
+	}
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintf(os.Stderr, "%s 配置已保存到 %s\n",
@@ -151,12 +153,12 @@ func RunSetup() (Config, error) {
 	return cfg, nil
 }
 
-func saveExampleConfig() {
+func saveExampleConfig() error {
 	dir, err := configDir()
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.WriteFile(filepath.Join(dir, "config.example.jsonc"), []byte(configtemplate.ConfigExampleJSONC), 0o644)
+	return os.WriteFile(filepath.Join(dir, "config.example.jsonc"), []byte(configtemplate.ConfigExampleJSONC), 0o644)
 }
 
 // printStepDone 打印一步完成的确认行。

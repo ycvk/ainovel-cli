@@ -1,6 +1,9 @@
 package store
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
@@ -18,6 +21,25 @@ func TestSetFlow(t *testing.T) {
 	p, _ := store.Progress.Load()
 	if p.Flow != domain.FlowRewriting {
 		t.Errorf("expected FlowRewriting, got %s", p.Flow)
+	}
+}
+
+func TestIsChapterCompletedReturnsReadError(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+	if err := store.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "meta", "progress.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("corrupt progress: %v", err)
+	}
+
+	_, err := store.Progress.IsChapterCompleted(1)
+	if err == nil {
+		t.Fatal("IsChapterCompleted should fail when progress cannot be read")
+	}
+	if !strings.Contains(err.Error(), "unexpected end of JSON input") {
+		t.Fatalf("error = %v, want JSON parse context", err)
 	}
 }
 
@@ -91,17 +113,29 @@ func TestIsChapterCompleted(t *testing.T) {
 	store := NewStore(dir)
 	_ = store.Progress.Init("test", 10)
 
-	if store.Progress.IsChapterCompleted(1) {
+	completed, err := store.Progress.IsChapterCompleted(1)
+	if err != nil {
+		t.Fatalf("IsChapterCompleted: %v", err)
+	}
+	if completed {
 		t.Fatal("chapter 1 should not be completed initially")
 	}
 
 	_ = store.Progress.StartChapter(1)
 	_ = store.Progress.MarkChapterComplete(1, 5000, "", "")
 
-	if !store.Progress.IsChapterCompleted(1) {
+	completed, err = store.Progress.IsChapterCompleted(1)
+	if err != nil {
+		t.Fatalf("IsChapterCompleted: %v", err)
+	}
+	if !completed {
 		t.Fatal("chapter 1 should be completed after MarkChapterComplete")
 	}
-	if store.Progress.IsChapterCompleted(2) {
+	completed, err = store.Progress.IsChapterCompleted(2)
+	if err != nil {
+		t.Fatalf("IsChapterCompleted: %v", err)
+	}
+	if completed {
 		t.Fatal("chapter 2 should not be completed")
 	}
 }

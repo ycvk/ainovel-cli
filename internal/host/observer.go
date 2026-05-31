@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/domain"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 	"github.com/voocel/ainovel-cli/internal/utils"
 	"github.com/voocel/litellm"
@@ -145,23 +144,20 @@ func (o *observer) emitAndLog(ev Event) {
 }
 
 // persistEvent 把事件写入 runtime queue（slog 由 host.emitEvent 统一记录）。
-func (o *observer) persistEvent(ev Event) {
+func (o *observer) persistEvent(ev Event) error {
 	if o.store == nil || o.store.Runtime == nil {
-		return
+		return nil
 	}
-	priority := domain.RuntimePriorityBackground
-	switch ev.Category {
-	case "SYSTEM", "ERROR":
-		priority = domain.RuntimePriorityControl
+	if _, err := o.store.Runtime.AppendQueue(runtimeQueueItemFromEvent(ev)); err != nil {
+		return fmt.Errorf("append runtime queue event %q: %w", ev.Summary, err)
 	}
-	_, _ = o.store.Runtime.AppendQueue(domain.RuntimeQueueItem{
-		Time:     ev.Time,
-		Kind:     domain.RuntimeQueueUIEvent,
-		Priority: priority,
-		Category: ev.Category,
-		Summary:  ev.Summary,
-		Payload:  ev,
-	})
+	return nil
+}
+
+func (o *observer) persistEventOrLog(ev Event) {
+	if err := o.persistEvent(ev); err != nil {
+		slog.Error("runtime queue 事件持久化失败", "module", "event", "category", ev.Category, "summary", ev.Summary, "err", err)
+	}
 }
 
 func (o *observer) handle(ev agentcore.Event) {
@@ -198,7 +194,7 @@ func (o *observer) handle(ev agentcore.Event) {
 				Level:    "warn",
 			}
 			o.emitEv(retryEv)
-			o.persistEvent(retryEv)
+			o.persistEventOrLog(retryEv)
 		}
 	case agentcore.EventError:
 		if ev.Err != nil {
@@ -217,7 +213,7 @@ func (o *observer) handle(ev agentcore.Event) {
 				Level:    "error",
 			}
 			o.emitEv(errEv)
-			o.persistEvent(errEv)
+			o.persistEventOrLog(errEv)
 		}
 	}
 }
@@ -378,7 +374,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 			Duration:   time.Since(call.start),
 		}
 		o.emitEv(finishEv)
-		o.persistEvent(finishEv)
+		o.persistEventOrLog(finishEv)
 	case agentcore.ProgressThinking:
 		o.handleThinkingProgress(ev)
 	case agentcore.ProgressRetry:
@@ -394,7 +390,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 			Depth:    1,
 		}
 		o.emitEv(retryEv)
-		o.persistEvent(retryEv)
+		o.persistEventOrLog(retryEv)
 	case agentcore.ProgressToolError:
 		delete(o.streamExtractors, ev.Progress.Agent)
 		msg := ev.Progress.Message
@@ -417,7 +413,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 				Duration:   time.Since(call.start),
 			}
 			o.emitEv(finishEv)
-			o.persistEvent(finishEv)
+			o.persistEventOrLog(finishEv)
 		}
 		// 附加 ERROR 详情行（补充错误信息，便于排查）
 		errEv := Event{
@@ -431,7 +427,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 			Depth:    1,
 		}
 		o.emitEv(errEv)
-		o.persistEvent(errEv)
+		o.persistEventOrLog(errEv)
 	case agentcore.ProgressContext:
 		o.handleContextProgress(ev)
 	}
@@ -567,7 +563,7 @@ func (o *observer) handleContextProgress(ev agentcore.Event) {
 		// 触发了压缩 → 事件流 + 日志
 		ctxEv := Event{Time: time.Now(), Category: "SYSTEM", Agent: agent, Summary: summary, Level: level, Depth: depth}
 		o.emitEv(ctxEv)
-		o.persistEvent(ctxEv)
+		o.persistEventOrLog(ctxEv)
 	} else {
 		// 普通使用率报告 → 仅日志
 		slogLevel := slog.LevelInfo
@@ -646,7 +642,7 @@ func (o *observer) handleToolEnd(ev agentcore.Event) {
 			Duration:   time.Since(call.start),
 		}
 		o.emitEv(finishEv)
-		o.persistEvent(finishEv)
+		o.persistEventOrLog(finishEv)
 	}
 	emitDispatchFinish := func(failed bool) {
 		emitFinish(dispatchCall, "DISPATCH", dispatchTarget, failed)
@@ -710,7 +706,7 @@ func (o *observer) handleToolEnd(ev agentcore.Event) {
 			Depth:    depth,
 		}
 		o.emitEv(errEv)
-		o.persistEvent(errEv)
+		o.persistEventOrLog(errEv)
 		return
 	}
 
@@ -727,7 +723,7 @@ func (o *observer) handleToolEnd(ev agentcore.Event) {
 		flushOrphanSubagentTool(true)
 		emitDispatchFinish(true)
 		o.emitEv(*errEv)
-		o.persistEvent(*errEv)
+		o.persistEventOrLog(*errEv)
 		return
 	}
 

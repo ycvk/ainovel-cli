@@ -18,10 +18,10 @@
   跑长篇时的实操排障手册：每个事实工件该看什么、运行日志如何读、上下文压缩和恢复状态如何定位。
   适合"跑到第 N 章发现奇怪现象"时打开。
 
-## 建议后续补充
+- [运行时与恢复说明](./runtime-and-recovery.md)
+  说明 Host 生命周期、Flow Dispatcher、Import 回放、WriterRestorePack、runtime queue 与 UI 投影的当前边界。
 
-- `runtime-and-recovery.md`
-  聚焦运行时任务流、恢复链路和宿主调度。
+## 建议后续补充
 
 - `writing-pipeline.md`
   聚焦 Architect / Writer / Editor 三个角色的协作流程。

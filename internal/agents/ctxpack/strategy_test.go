@@ -2,6 +2,8 @@ package ctxpack
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -116,9 +118,14 @@ func TestStoreSummaryCompactApplyFallsBackWhenStoreDataInsufficient(t *testing.T
 func TestWriterRestorePackRefreshReusesStoreBuilder(t *testing.T) {
 	s := seededWriterStore(t)
 	pack := &WriterRestorePack{}
-	pack.Refresh(s)
+	if err := pack.Refresh(s); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
 
-	msg, ok := pack.buildMessage(restoreBudgetTokens)
+	msg, ok, err := pack.buildMessage(restoreBudgetTokens)
+	if err != nil {
+		t.Fatalf("buildMessage: %v", err)
+	}
 	if !ok {
 		t.Fatal("expected restore pack message")
 	}
@@ -131,6 +138,61 @@ func TestWriterRestorePackRefreshReusesStoreBuilder(t *testing.T) {
 	}
 	if !strings.Contains(text, "当前章节计划") {
 		t.Fatalf("expected chapter plan section, got %q", text)
+	}
+}
+
+func TestWriterRestorePackRefreshReturnsProgressReadError(t *testing.T) {
+	s := storepkg.NewStore(t.TempDir())
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(s.Dir(), "meta", "progress.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("corrupt progress: %v", err)
+	}
+
+	pack := &WriterRestorePack{}
+	if err := pack.Refresh(s); err == nil {
+		t.Fatal("Refresh should fail when progress cannot be read")
+	}
+}
+
+func TestWriterRestorePackRefreshReturnsFallbackStateReadError(t *testing.T) {
+	s := storepkg.NewStore(t.TempDir())
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Save(&domain.Progress{
+		Phase:          domain.PhaseWriting,
+		Flow:           domain.FlowWriting,
+		CurrentChapter: 1,
+		TotalChapters:  3,
+	}); err != nil {
+		t.Fatalf("Save progress: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(s.Dir(), "timeline.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("corrupt timeline: %v", err)
+	}
+
+	pack := &WriterRestorePack{}
+	err := pack.Refresh(s)
+	if err == nil {
+		t.Fatal("Refresh should fail when fallback restore state cannot be read")
+	}
+	if !strings.Contains(err.Error(), "timeline") {
+		t.Fatalf("error = %v, want timeline context", err)
+	}
+}
+
+func TestWriterRestorePackHookReturnsOversizeError(t *testing.T) {
+	pack := &WriterRestorePack{
+		text:    strings.Repeat("x", restoreBudgetTokens*16),
+		chapter: 1,
+	}
+
+	hook := pack.Hook()
+	_, err := hook(context.Background(), corecontext.SummaryInfo{}, nil)
+	if err == nil {
+		t.Fatal("Hook should fail when cached restore pack exceeds budget")
 	}
 }
 

@@ -188,3 +188,49 @@ func TestRunner_ResumeFromSkipsFoundation(t *testing.T) {
 		t.Errorf("want 2 chapter LLM calls (foundation skipped), got %d", llm.calls.Load())
 	}
 }
+
+func TestRunner_ResumeFromFreshStoreBuildsFoundation(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "novel.txt")
+	body := strings.Repeat("正文。\n", 30)
+	content := "第一章 a\n" + body + "\n第二章 b\n" + body
+	_ = os.WriteFile(src, []byte(content), 0o644)
+
+	st := store.NewStore(filepath.Join(dir, "out"))
+	_ = st.Init()
+	_ = st.Progress.Init("resume-fresh-test", 0)
+
+	llm := &scriptedLLM{responses: []string{validEnvelope, validAnalyzerEnvelope}}
+	deps := Deps{
+		Store:      st,
+		CommitTool: tools.NewCommitChapterTool(st),
+		LLM:        llm,
+		Prompts:    Prompts{Foundation: "x", Analyzer: "x"},
+	}
+	events, err := Run(context.Background(), deps, Options{SourcePath: src, ResumeFrom: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ev := range events {
+		if ev.Err != nil {
+			t.Fatalf("err: %v", ev.Err)
+		}
+	}
+	if llm.calls.Load() != 2 {
+		t.Fatalf("want 2 LLM calls (foundation + chapter 2), got %d", llm.calls.Load())
+	}
+	missing, err := st.FoundationMissing()
+	if err != nil {
+		t.Fatalf("FoundationMissing: %v", err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("foundation should be complete, missing: %v", missing)
+	}
+	progress, err := st.Progress.Load()
+	if err != nil {
+		t.Fatalf("Load progress: %v", err)
+	}
+	if progress == nil || len(progress.CompletedChapters) != 1 || progress.CompletedChapters[0] != 2 {
+		t.Fatalf("expected only chapter 2 imported, progress=%+v", progress)
+	}
+}

@@ -2,6 +2,8 @@ package imp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -170,8 +172,32 @@ func TestPersistFoundation_PromotesPhaseToWriting(t *testing.T) {
 	if prog.NovelName != "测试书名" {
 		t.Errorf("novel name: %q", prog.NovelName)
 	}
-	if got := st.FoundationMissing(); len(got) != 0 {
+	got, err := st.FoundationMissing()
+	if err != nil {
+		t.Fatalf("FoundationMissing: %v", err)
+	}
+	if len(got) != 0 {
 		t.Errorf("foundation should be complete, missing: %v", got)
+	}
+}
+
+func TestPersistFoundationReturnsProgressWriteError(t *testing.T) {
+	dir := t.TempDir()
+	st := store.NewStore(dir)
+	if err := st.Init(); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "meta", "progress.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("corrupt progress: %v", err)
+	}
+
+	fr := mustParse(t, validEnvelope, 2)
+	err := PersistFoundation(context.Background(), st, domain.PlanningTierShort, fr)
+	if err == nil {
+		t.Fatal("PersistFoundation should fail when progress cannot be updated")
+	}
+	if !strings.Contains(err.Error(), "progress") {
+		t.Fatalf("error = %v, want progress context", err)
 	}
 }
 

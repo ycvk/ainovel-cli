@@ -25,7 +25,7 @@ type Options struct {
 	CustomRegex string
 
 	// ResumeFrom 可选。从第 N 章开始导入；0 / 1 表示从头。
-	// 若 > 1，会跳过 Foundation 反推（认为已落盘）。
+	// 只影响章节循环起点；Foundation 缺失时仍会先反推并落盘。
 	ResumeFrom int
 }
 

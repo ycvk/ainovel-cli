@@ -72,7 +72,10 @@ func (d *Dispatcher) Dispatch() error {
 		return fmt.Errorf("flow router dispatch: coordinator is not bound")
 	}
 
-	state := LoadState(d.store)
+	state, err := LoadState(d.store)
+	if err != nil {
+		return fmt.Errorf("flow router load state: %w", err)
+	}
 	inst := Route(state)
 	if inst == nil {
 		return nil

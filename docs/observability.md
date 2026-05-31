@@ -70,7 +70,7 @@ Headless 日志在：
 - `meta/runtime/`
 - `meta/runtime/tasks/`
 
-TUI 重放、恢复控制和任务日志从这里读取。若界面显示和 Store 事实不一致，先检查 runtime queue 是否落后于 `progress.json`。
+TUI 重放、恢复控制和任务日志从这里读取。Host 自发的 SYSTEM / USER / ERROR 生命周期事件会写入 runtime queue；调用类事件由 observer 持久化完成态和错误态。若界面显示和 Store 事实不一致，先检查 runtime queue 是否落后于 `progress.json`。
 
 ## 6. 常见定位路径
 

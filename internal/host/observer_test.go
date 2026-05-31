@@ -2,11 +2,14 @@ package host
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/voocel/agentcore"
+	storepkg "github.com/voocel/ainovel-cli/internal/store"
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
 
@@ -111,6 +114,48 @@ func TestHostEmitDeltaBackpressuresInsteadOfDropping(t *testing.T) {
 	}
 	if got := <-h.streamCh; got != "third" {
 		t.Fatalf("third delta = %q, want third", got)
+	}
+}
+
+func TestHostEmitDurableEventPersistsWhenProjectionFull(t *testing.T) {
+	st := storepkg.NewStore(t.TempDir())
+	if err := st.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	h := &Host{store: st, events: make(chan Event, 1)}
+	h.events <- Event{Summary: "old projection"}
+
+	if err := h.emitDurableEvent(Event{
+		Time:     time.Now(),
+		Category: "SYSTEM",
+		Summary:  "durable event",
+		Level:    "info",
+	}); err != nil {
+		t.Fatalf("emitDurableEvent: %v", err)
+	}
+
+	items, err := st.Runtime.LoadQueue()
+	if err != nil {
+		t.Fatalf("LoadQueue: %v", err)
+	}
+	if len(items) != 1 || items[0].Summary != "durable event" {
+		t.Fatalf("durable event not persisted: %+v", items)
+	}
+}
+
+func TestObserverPersistEventReturnsAppendQueueError(t *testing.T) {
+	st := storepkg.NewStore(t.TempDir())
+	if err := st.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(st.Dir(), "meta", "runtime", "queue.jsonl"), []byte("{\n"), 0o644); err != nil {
+		t.Fatalf("corrupt runtime queue: %v", err)
+	}
+
+	o := &observer{store: st}
+	err := o.persistEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "will fail"})
+	if err == nil {
+		t.Fatal("persistEvent should return runtime queue append error")
 	}
 }
 

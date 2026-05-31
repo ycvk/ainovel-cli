@@ -133,9 +133,13 @@ func PersistFoundation(ctx context.Context, st *store.Store, scale domain.Planni
 		return fmt.Errorf("save premise: %w", err)
 	}
 	if name := domain.ExtractNovelNameFromPremise(fr.Premise); name != "" {
-		_ = st.Progress.SetNovelName(name)
+		if err := st.Progress.SetNovelName(name); err != nil {
+			return fmt.Errorf("set progress novel name: %w", err)
+		}
 	}
-	_ = st.Progress.UpdatePhase(domain.PhasePremise)
+	if err := st.Progress.UpdatePhase(domain.PhasePremise); err != nil {
+		return fmt.Errorf("update progress phase premise: %w", err)
+	}
 	if _, err := st.Checkpoints.AppendArtifact(domain.GlobalScope(), "premise", "premise.md"); err != nil {
 		return fmt.Errorf("checkpoint premise: %w", err)
 	}
@@ -160,20 +164,39 @@ func PersistFoundation(ctx context.Context, st *store.Store, scale domain.Planni
 	if err := st.Outline.SaveOutline(fr.Outline); err != nil {
 		return fmt.Errorf("save outline: %w", err)
 	}
-	_ = st.Progress.UpdatePhase(domain.PhaseOutline)
-	_ = st.Progress.SetTotalChapters(len(fr.Outline))
-	_ = st.Progress.SetLayered(false)
-	_ = st.Progress.UpdateVolumeArc(0, 0)
-	_ = st.Outline.ClearLayeredOutline()
+	if err := st.Progress.UpdatePhase(domain.PhaseOutline); err != nil {
+		return fmt.Errorf("update progress phase outline: %w", err)
+	}
+	if err := st.Progress.SetTotalChapters(len(fr.Outline)); err != nil {
+		return fmt.Errorf("set progress total chapters: %w", err)
+	}
+	if err := st.Progress.SetLayered(false); err != nil {
+		return fmt.Errorf("set progress layered false: %w", err)
+	}
+	if err := st.Progress.UpdateVolumeArc(0, 0); err != nil {
+		return fmt.Errorf("reset progress volume arc: %w", err)
+	}
+	if err := st.Outline.ClearLayeredOutline(); err != nil {
+		return fmt.Errorf("clear layered outline: %w", err)
+	}
 	if _, err := st.Checkpoints.AppendArtifact(domain.GlobalScope(), "outline", "outline.json"); err != nil {
 		return fmt.Errorf("checkpoint outline: %w", err)
 	}
 
 	// 5. foundation 完整 → 推进到 writing 阶段（与 save_foundation 末尾逻辑一致）
-	if len(st.FoundationMissing()) == 0 {
-		if p, _ := st.Progress.Load(); p != nil &&
-			p.Phase != domain.PhaseWriting && p.Phase != domain.PhaseComplete {
-			_ = st.Progress.UpdatePhase(domain.PhaseWriting)
+	missing, err := st.FoundationMissing()
+	if err != nil {
+		return fmt.Errorf("check foundation readiness: %w", err)
+	}
+	if len(missing) == 0 {
+		p, err := st.Progress.Load()
+		if err != nil {
+			return fmt.Errorf("load progress: %w", err)
+		}
+		if p != nil && p.Phase != domain.PhaseWriting && p.Phase != domain.PhaseComplete {
+			if err := st.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+				return fmt.Errorf("update progress phase writing: %w", err)
+			}
 		}
 	}
 	return nil

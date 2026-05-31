@@ -556,7 +556,11 @@ func (t *ContextTool) buildArchitectFoundation(envelope *architectContextEnvelop
 	} else {
 		warn("foreshadow_ledger", err)
 	}
-	envelope.Foundation["foundation_status"] = t.foundationStatus()
+	if status, err := t.foundationStatus(); err == nil {
+		envelope.Foundation["foundation_status"] = status
+	} else {
+		warn("foundation_status", err)
+	}
 }
 
 func (t *ContextTool) buildArchitectReferences(envelope *architectContextEnvelope, warn func(string, error)) {

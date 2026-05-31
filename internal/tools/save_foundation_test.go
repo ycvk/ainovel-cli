@@ -3,6 +3,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
@@ -77,6 +80,34 @@ func TestSaveFoundationPremiseSetsNovelName(t *testing.T) {
 	}
 	if progress.NovelName != "长夜燃灯" {
 		t.Fatalf("expected novel name set, got %q", progress.NovelName)
+	}
+}
+
+func TestSaveFoundationPremiseReturnsProgressWriteError(t *testing.T) {
+	dir := t.TempDir()
+	store := store.NewStore(dir)
+	if err := store.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "meta", "progress.json"), []byte("{"), 0o644); err != nil {
+		t.Fatalf("corrupt progress: %v", err)
+	}
+
+	tool := NewSaveFoundationTool(store)
+	args, err := json.Marshal(map[string]any{
+		"type":    "premise",
+		"content": "# 长夜燃灯\n\n## 题材和基调\n东方玄幻",
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	_, err = tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("Execute should return progress write error")
+	}
+	if !strings.Contains(err.Error(), "progress") {
+		t.Fatalf("error = %v, want progress context", err)
 	}
 }
 
