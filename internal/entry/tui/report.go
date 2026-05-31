@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/voocel/ainovel-cli/internal/diag"
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 )
 
 type reportState struct {
@@ -164,11 +165,11 @@ func renderReportText(report diag.Report, width int, startedAt, finishedAt time.
 			b.WriteString("\n")
 			b.WriteString(actionStyle.Render("[" + string(a.Kind) + "]"))
 			b.WriteString(" ")
-			b.WriteString(a.Summary)
+			b.WriteString(termtext.Line(a.Summary))
 			b.WriteString("\n")
 			if a.Message != "" {
 				b.WriteString("  ")
-				b.WriteString(mutedStyle.Render(wrapText(a.Message, width-4)))
+				b.WriteString(mutedStyle.Render(wrapDisplayText(a.Message, width-4)))
 				b.WriteString("\n")
 			}
 		}
@@ -187,7 +188,7 @@ func renderReportLoadingText(width int, startedAt time.Time) string {
 	b.WriteString("\n\n")
 	b.WriteString(hintStyle.Render("开始时间 " + formatReportTime(startedAt)))
 	b.WriteString("\n\n")
-	b.WriteString(bodyStyle.Render(wrapText("正在读取当前小说 output 产物并分析流程、质量、规划和上下文问题。项目较大时可能需要几秒。", width)))
+	b.WriteString(bodyStyle.Render(wrapDisplayText("正在读取当前小说 output 产物并分析流程、质量、规划和上下文问题。项目较大时可能需要几秒。", width)))
 	b.WriteString("\n\n")
 	b.WriteString(hintStyle.Render("Esc 可先关闭面板，后台分析完成后下次打开会重新生成。"))
 	return b.String()
@@ -220,7 +221,7 @@ func renderFinding(b *strings.Builder, f diag.Finding, width int) {
 
 	b.WriteString(sevStyle.Render(fmt.Sprintf("[%s]", marker)))
 	b.WriteString(" ")
-	b.WriteString(f.Title)
+	b.WriteString(termtext.Line(f.Title))
 	if f.Confidence != "" || f.AutoLevel != "" {
 		tagStyle := lipgloss.NewStyle().Foreground(colorDim)
 		tags := ""
@@ -242,12 +243,12 @@ func renderFinding(b *strings.Builder, f diag.Finding, width int) {
 
 	if f.Evidence != "" {
 		b.WriteString("  ")
-		b.WriteString(evidenceStyle.Render(wrapText(f.Evidence, width-4)))
+		b.WriteString(evidenceStyle.Render(wrapDisplayText(f.Evidence, width-4)))
 		b.WriteString("\n")
 	}
 	if f.Suggestion != "" {
 		b.WriteString("  ")
-		b.WriteString(suggestionStyle.Render("-> " + wrapText(f.Suggestion, width-7)))
+		b.WriteString(suggestionStyle.Render("-> " + wrapDisplayText(f.Suggestion, width-7)))
 		b.WriteString("\n")
 	}
 }
@@ -283,25 +284,9 @@ func formatSeverityCounts(c, w, i int) string {
 	return "(" + strings.Join(parts, " / ") + ")"
 }
 
-// wrapText 对长文本做简单换行。
-func wrapText(s string, maxWidth int) string {
-	if maxWidth <= 0 || lipgloss.Width(s) <= maxWidth {
-		return s
-	}
-	runes := []rune(s)
-	var b strings.Builder
-	lineW := 0
-	for _, r := range runes {
-		w := lipgloss.Width(string(r))
-		if lineW+w > maxWidth && lineW > 0 {
-			b.WriteRune('\n')
-			b.WriteString("  ") // indent continuation
-			lineW = 2
-		}
-		b.WriteRune(r)
-		lineW += w
-	}
-	return b.String()
+// wrapDisplayText 对长文本做 terminal-safe 简单换行。
+func wrapDisplayText(s string, maxWidth int) string {
+	return termtext.WrapString(s, maxWidth)
 }
 
 func renderReportModal(width, height int, state *reportState) string {

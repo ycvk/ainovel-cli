@@ -44,7 +44,7 @@ func renderHelpText(width int) string {
 		b.WriteString("\n")
 		b.WriteString(usageStyle.Render("Usage: " + spec.Usage))
 		b.WriteString("\n")
-		b.WriteString(descStyle.Render(wrapText(spec.Description, width)))
+		b.WriteString(descStyle.Render(wrapDisplayText(spec.Description, width)))
 		b.WriteString("\n")
 	}
 

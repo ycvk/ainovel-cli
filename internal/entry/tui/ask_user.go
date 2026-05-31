@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/tools"
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
@@ -200,10 +201,10 @@ func renderAskUserModal(width, height int, state *askUserState) string {
 	b.WriteString(lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(title))
 	b.WriteString("\n\n")
 	if q.Header != "" {
-		b.WriteString(highlightValueStyle.Render(q.Header))
+		b.WriteString(highlightValueStyle.Render(termtext.Line(q.Header)))
 		b.WriteString("\n")
 	}
-	b.WriteString(cardContentStyle.Render(q.Question))
+	b.WriteString(cardContentStyle.Render(termtext.Plain(q.Question)))
 	b.WriteString("\n\n")
 
 	for idx := 0; idx < state.optionCount(); idx++ {
@@ -219,9 +220,9 @@ func renderAskUserModal(width, height int, state *askUserState) string {
 			}
 			label = marker + " " + label
 		}
-		b.WriteString(prefix + cardContentStyle.Render(label))
+		b.WriteString(prefix + cardContentStyle.Render(termtext.Line(label)))
 		b.WriteString("\n")
-		b.WriteString("  " + lipgloss.NewStyle().Foreground(colorDim).Render(state.choiceDescription(idx)))
+		b.WriteString("  " + lipgloss.NewStyle().Foreground(colorDim).Render(termtext.Line(state.choiceDescription(idx))))
 		b.WriteString("\n")
 	}
 
@@ -238,7 +239,7 @@ func renderAskUserModal(width, height int, state *askUserState) string {
 			Border(baseBorder).
 			BorderForeground(colorDim).
 			Padding(0, 1)
-		b.WriteString(style.Render(content))
+		b.WriteString(style.Render(termtext.Plain(content)))
 		b.WriteString("\n")
 	}
 

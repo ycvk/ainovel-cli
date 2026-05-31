@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
 	"github.com/voocel/ainovel-cli/internal/host/imp"
 )
@@ -89,7 +90,7 @@ func (s *importState) refresh(contentW int) {
 	b.WriteString(titleStyle.Render("导入外部小说"))
 	b.WriteString("\n\n")
 	b.WriteString(dimStyle.Render("源文件 "))
-	b.WriteString(s.source)
+	b.WriteString(termtext.Line(s.source))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render("开始 "))
 	b.WriteString(formatReportTime(s.startedAt))
@@ -127,9 +128,9 @@ func (s *importState) refresh(contentW int) {
 		}
 		b.WriteString(" ")
 		if ln.err != nil {
-			b.WriteString(errStyle.Render(ln.message + " — " + ln.err.Error()))
+			b.WriteString(errStyle.Render(termtext.Line(ln.message + " — " + ln.err.Error())))
 		} else {
-			b.WriteString(wrapText(ln.message, contentW))
+			b.WriteString(wrapDisplayText(ln.message, contentW))
 		}
 	}
 

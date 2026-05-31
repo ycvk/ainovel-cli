@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/domain"
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
@@ -35,9 +34,17 @@ func TestStopGuard_AllowsStopOnlyWhenComplete(t *testing.T) {
 		t.Fatal("inject message required when blocking")
 	}
 
-	// 转 Complete：放行
-	if err := s.Progress.UpdatePhase(domain.PhaseComplete); err != nil {
-		t.Fatalf("update phase: %v", err)
+	// 通过唯一完结入口转 Complete：放行
+	for ch := 1; ch <= 3; ch++ {
+		if err := s.Drafts.SaveFinalChapter(ch, "终稿"); err != nil {
+			t.Fatalf("save final chapter %d: %v", ch, err)
+		}
+		if err := s.Progress.MarkChapterComplete(ch, 2, "", ""); err != nil {
+			t.Fatalf("mark chapter %d complete: %v", ch, err)
+		}
+	}
+	if err := s.CompleteBook(); err != nil {
+		t.Fatalf("complete book: %v", err)
 	}
 	decision = guard(context.Background(), agentcore.StopInfo{TurnIndex: 2})
 	if !decision.Allow {

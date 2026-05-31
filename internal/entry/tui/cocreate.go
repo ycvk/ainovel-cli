@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/voocel/ainovel-cli/internal/entry/startup"
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
@@ -274,7 +275,7 @@ func renderCoCreateSuggestions(width int, state *cocreateState) string {
 
 	lines := []string{hintStyle.Render("AI 建议（按数字键填入输入框）：")}
 	for i, s := range sugs {
-		lines = append(lines, digitStyle.Render(digits[i]+" ")+bodyStyle.Render(strings.TrimSpace(s)))
+		lines = append(lines, digitStyle.Render(digits[i]+" ")+bodyStyle.Render(termtext.Line(strings.TrimSpace(s))))
 	}
 
 	// 与 inputBox 左右 margin/padding 对齐：左 2 列（margin1+padding1）、右同。
@@ -543,13 +544,13 @@ func renderMarkdownPreview(text string, width int) string {
 		switch {
 		case strings.HasPrefix(line, "# "):
 			title := strings.TrimSpace(strings.TrimPrefix(line, "# "))
-			out = append(out, h1Style.Render(title))
+			out = append(out, h1Style.Render(termtext.Line(title)))
 		case strings.HasPrefix(line, "## "):
 			title := strings.TrimSpace(strings.TrimPrefix(line, "## "))
-			out = append(out, h2Style.Render(title))
+			out = append(out, h2Style.Render(termtext.Line(title)))
 		case strings.HasPrefix(line, "### "):
 			title := strings.TrimSpace(strings.TrimPrefix(line, "### "))
-			out = append(out, h3Style.Render(title))
+			out = append(out, h3Style.Render(termtext.Line(title)))
 		case strings.HasPrefix(line, "- "), strings.HasPrefix(line, "* "):
 			body := strings.TrimSpace(line[2:])
 			wrapped := wrapStreamText(body, max(8, width-4))

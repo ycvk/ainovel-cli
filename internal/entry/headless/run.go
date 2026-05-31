@@ -10,6 +10,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
 	"github.com/voocel/ainovel-cli/internal/domain"
 	"github.com/voocel/ainovel-cli/internal/entry/startup"
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
 	"github.com/voocel/ainovel-cli/internal/logger"
 )
@@ -109,7 +110,7 @@ func consume(eng *host.Host, stdout, stderr io.Writer, roundHasContent bool) err
 			if delta == "" {
 				continue
 			}
-			if _, err := io.WriteString(stdout, delta); err != nil {
+			if _, err := io.WriteString(stdout, termtext.Plain(delta)); err != nil {
 				return err
 			}
 			roundHasContent = true
@@ -143,7 +144,7 @@ func drainPending(eng *host.Host, stdout, stderr io.Writer, roundHasContent bool
 				continue
 			}
 			if delta != "" {
-				if _, err := io.WriteString(stdout, delta); err != nil {
+				if _, err := io.WriteString(stdout, termtext.Plain(delta)); err != nil {
 					return err
 				}
 				roundHasContent = true
@@ -167,7 +168,7 @@ func writeEvent(w io.Writer, ev host.Event) {
 	if ts == "00:00:00" {
 		ts = "--:--:--"
 	}
-	fmt.Fprintf(w, "[%s] [%s] %s\n", ts, ev.Category, ev.Summary)
+	fmt.Fprintf(w, "[%s] [%s] %s\n", ts, termtext.Line(ev.Category), termtext.Line(ev.Summary))
 }
 
 func replayQueue(items []domain.RuntimeQueueItem, stdout, stderr io.Writer) (bool, error) {
@@ -192,7 +193,7 @@ func replayQueue(items []domain.RuntimeQueueItem, stdout, stderr io.Writer) (boo
 			if text == "" {
 				continue
 			}
-			if _, err := io.WriteString(stdout, text); err != nil {
+			if _, err := io.WriteString(stdout, termtext.Plain(text)); err != nil {
 				return roundHasContent, err
 			}
 			roundHasContent = true

@@ -291,11 +291,17 @@ func TestSaveFoundationAppendVolumeRejectsAfterComplete(t *testing.T) {
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := s.Progress.Init("test", 0); err != nil {
+	if err := s.Progress.Init("test", 1); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	if err := s.Progress.MarkComplete(); err != nil {
-		t.Fatalf("MarkComplete: %v", err)
+	if err := s.Drafts.SaveFinalChapter(1, "第一章终稿。"); err != nil {
+		t.Fatalf("SaveFinalChapter: %v", err)
+	}
+	if err := s.Progress.MarkChapterComplete(1, 6, "", ""); err != nil {
+		t.Fatalf("MarkChapterComplete: %v", err)
+	}
+	if err := s.CompleteBook(); err != nil {
+		t.Fatalf("CompleteBook: %v", err)
 	}
 
 	tool := NewSaveFoundationTool(s)
@@ -439,9 +445,7 @@ func TestSaveFoundationAcceptsDirectJSONArrayContent(t *testing.T) {
 	}
 }
 
-// completeBookSetup 建一份处于 writing 阶段的最小 Store，用于 complete_book 系列测试。
-// complete_book 不校验 layered_outline 章节齐全（判定责任在 LLM 的"完结判定清单"），
-// 工具层只校验 PendingRewrites 为空、progress 已初始化。
+// completeBookSetup 建一份处于 writing 阶段且已有终稿章节的 Store，用于 complete_book 成功路径。
 func completeBookSetup(t *testing.T) *store.Store {
 	t.Helper()
 	dir := t.TempDir()
@@ -449,10 +453,15 @@ func completeBookSetup(t *testing.T) *store.Store {
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := s.Progress.Init("test", 0); err != nil {
+	if err := s.Progress.Init("test", 1); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
+	if err := s.Drafts.SaveFinalChapter(1, "第一章终稿。"); err != nil {
+		t.Fatalf("SaveFinalChapter: %v", err)
+	}
+	if err := s.Progress.MarkChapterComplete(1, 6, "", ""); err != nil {
+		t.Fatalf("MarkChapterComplete: %v", err)
+	}
 	return s
 }
 
@@ -502,6 +511,89 @@ func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
 	progress, _ := s.Progress.Load()
 	if progress.Phase != domain.PhaseOutline {
 		t.Fatalf("phase should remain outline, got %s", progress.Phase)
+	}
+}
+
+func TestSaveFoundationCompleteBookRejectsNoCompletedChapters(t *testing.T) {
+	dir := t.TempDir()
+	s := store.NewStore(dir)
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 1); err != nil {
+		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
+		t.Fatalf("UpdatePhase writing: %v", err)
+	}
+
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "complete_book", "content": map[string]any{},
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("expected error when no chapters have been completed")
+	}
+	progress, _ := s.Progress.Load()
+	if progress.Phase == domain.PhaseComplete {
+		t.Fatalf("phase should not be Complete with zero completed chapters: %s", progress.Phase)
+	}
+}
+
+func TestSaveFoundationCompleteBookRejectsIncompletePlannedChapters(t *testing.T) {
+	dir := t.TempDir()
+	s := store.NewStore(dir)
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Init("test", 2); err != nil {
+		t.Fatalf("InitProgress: %v", err)
+	}
+	if err := s.Drafts.SaveFinalChapter(1, "第一章终稿。"); err != nil {
+		t.Fatalf("SaveFinalChapter: %v", err)
+	}
+	if err := s.Progress.MarkChapterComplete(1, 6, "", ""); err != nil {
+		t.Fatalf("MarkChapterComplete: %v", err)
+	}
+
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "complete_book", "content": map[string]any{},
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("expected error before all planned chapters are completed")
+	}
+	progress, _ := s.Progress.Load()
+	if progress.Phase == domain.PhaseComplete {
+		t.Fatalf("phase should not be Complete before total chapters are complete: %s", progress.Phase)
+	}
+}
+
+func TestSaveFoundationCompleteBookRejectsMissingFinalChapterArtifact(t *testing.T) {
+	dir := t.TempDir()
+	s := store.NewStore(dir)
+	if err := s.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := s.Progress.Save(&domain.Progress{
+		NovelName:         "test",
+		Phase:             domain.PhaseWriting,
+		TotalChapters:     1,
+		CompletedChapters: []int{1},
+	}); err != nil {
+		t.Fatalf("Save progress: %v", err)
+	}
+
+	tool := NewSaveFoundationTool(s)
+	args, _ := json.Marshal(map[string]any{
+		"type": "complete_book", "content": map[string]any{},
+	})
+	if _, err := tool.Execute(context.Background(), args); err == nil {
+		t.Fatal("expected error when completed chapter has no final artifact")
+	}
+	progress, _ := s.Progress.Load()
+	if progress.Phase == domain.PhaseComplete {
+		t.Fatalf("phase should not be Complete without final chapter artifact: %s", progress.Phase)
 	}
 }
 

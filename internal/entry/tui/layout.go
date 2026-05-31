@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 )
 
 // --- 辅助函数 ---
@@ -13,10 +14,12 @@ func renderField(label, value string) string {
 	if value == "" {
 		value = "-"
 	}
+	value = termtext.Line(value)
 	return fieldLabelStyle.Render(label) + fieldValueStyle.Render(value) + "\n"
 }
 
 func renderHighlightField(label, value string) string {
+	value = termtext.Line(value)
 	return fieldLabelStyle.Render(label) + highlightValueStyle.Render(value) + "\n"
 }
 
@@ -96,12 +99,5 @@ func formatNumber(n int) string {
 }
 
 func truncate(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	if max < 4 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-3]) + "..."
+	return termtext.TruncateLine(s, max)
 }

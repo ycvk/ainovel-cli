@@ -196,11 +196,6 @@ func (s *ProgressStore) MarkChapterComplete(chapter, wordCount int, hookType, do
 	})
 }
 
-// MarkComplete 标记全书创作完成。
-func (s *ProgressStore) MarkComplete() error {
-	return s.UpdatePhase(domain.PhaseComplete)
-}
-
 // ClearInProgress 清除进度中间状态。
 func (s *ProgressStore) ClearInProgress() error {
 	return s.io.WithWriteLock(func() error {

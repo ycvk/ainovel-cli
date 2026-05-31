@@ -527,15 +527,17 @@ func loadCoreCharacterNameSet(s *store.Store) map[string]bool {
 	return set
 }
 
-// applyCompletion 仅处理非分层模式：写完约定总章数 → MarkComplete。
+// applyCompletion 仅处理非分层模式：写完约定总章数 → Store.CompleteBook。
 // 分层模式的全书完结统一走 architect 显式调用 save_foundation type=complete_book。
 func (t *CommitChapterTool) applyCompletion(result *domain.CommitResult, progress *domain.Progress) (bool, error) {
 	if progress == nil || progress.Layered {
 		return false, nil
 	}
-	if progress.TotalChapters > 0 && result.NextChapter > progress.TotalChapters {
-		if err := t.store.Progress.MarkComplete(); err != nil {
-			return false, fmt.Errorf("mark complete: %w: %w", errs.ErrStoreWrite, err)
+	if progress.TotalChapters > 0 &&
+		result.NextChapter > progress.TotalChapters &&
+		len(progress.CompletedChapters) >= progress.TotalChapters {
+		if err := t.store.CompleteBook(); err != nil {
+			return false, err
 		}
 		return true, nil
 	}

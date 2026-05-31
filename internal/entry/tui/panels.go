@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/voocel/ainovel-cli/internal/entry/termtext"
 	"github.com/voocel/ainovel-cli/internal/host"
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
@@ -1131,6 +1132,7 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 
 // renderDispatchSummary 渲染 DISPATCH 摘要：Agent 名用角色色，任务用淡色。
 func renderDispatchSummary(summary string, maxW int) string {
+	summary = termtext.Line(summary)
 	agentName := summary
 	taskPart := ""
 	if idx := strings.Index(summary, "（"); idx > 0 {
@@ -1325,7 +1327,7 @@ func renderStreamContent(rounds []string, width int, cursor string) string {
 
 	var blocks []string
 	for _, round := range rounds {
-		text := strings.TrimSpace(round)
+		text := strings.TrimSpace(termtext.StripSequences(round))
 		if text == "" {
 			continue
 		}
@@ -1350,6 +1352,7 @@ func renderStreamContent(rounds []string, width int, cursor string) string {
 // 更可靠的视觉锚。图标 ✻ 反过来用金色作锚点，跟 label 形成双色对比。
 func renderAgentBlock(text string, width int) string {
 	headerLine, body, _ := strings.Cut(text, "\n")
+	headerLine = termtext.Line(headerLine)
 
 	iconStyle := lipgloss.NewStyle().Foreground(colorAccent).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).Underline(true)
@@ -1426,6 +1429,7 @@ func renderChapterBlock(text string, width int) string {
 }
 
 func wrapStreamText(text string, width int) []string {
+	text = termtext.Plain(text)
 	if width < 8 {
 		return []string{text}
 	}
@@ -1653,20 +1657,7 @@ func renderOutlineCell(e host.OutlineSnapshot, snap host.UISnapshot, chNumW, tit
 // truncateWidth 按"视觉宽度"截断（中文字符算 2 列），与 lipgloss.Width 同源。
 // 普通 truncate 按 rune 数算，对中文会截到双倍宽度，这里需要列对齐时不能用。
 func truncateWidth(s string, maxW int) string {
-	if lipgloss.Width(s) <= maxW {
-		return s
-	}
-	var b strings.Builder
-	cur := 0
-	for _, r := range s {
-		rw := lipgloss.Width(string(r))
-		if cur+rw > maxW {
-			break
-		}
-		b.WriteRune(r)
-		cur += rw
-	}
-	return b.String()
+	return termtext.TruncateWidth(s, maxW)
 }
 
 // renderDetailContent 构建右侧详情面板内容。
@@ -1678,7 +1669,7 @@ func renderDetailContent(snap host.UISnapshot, contentW int) string {
 	if len(snap.Outline) > 0 {
 		outlineHeader := ":: 大纲"
 		if snap.Layered {
-			outlineHeader = fmt.Sprintf(":: 大纲（%s · 动态规划大纲）", snap.CurrentVolumeArc)
+			outlineHeader = fmt.Sprintf(":: 大纲（%s · 动态规划大纲）", termtext.Line(snap.CurrentVolumeArc))
 		}
 		b.WriteString(panelTitleStyle.Render(outlineHeader))
 		b.WriteString("\n")
@@ -1687,7 +1678,7 @@ func renderDetailContent(snap host.UISnapshot, contentW int) string {
 		compassStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 		if snap.Layered {
 			if snap.NextVolumeTitle != "" {
-				b.WriteString(compassStyle.Render("  ┄ 下一卷：" + snap.NextVolumeTitle))
+				b.WriteString(compassStyle.Render("  ┄ 下一卷：" + termtext.Line(snap.NextVolumeTitle)))
 				b.WriteString("\n")
 			}
 			b.WriteString(compassStyle.Render("  ··· 后续章节随创作推进自动生成"))
@@ -1742,14 +1733,14 @@ func renderDetailContent(snap host.UISnapshot, contentW int) string {
 	if snap.LastCommitSummary != "" {
 		b.WriteString(cardTitleStyle.Render("~ 最近提交 ~"))
 		b.WriteString("\n")
-		b.WriteString(cardContentStyle.Render(snap.LastCommitSummary))
+		b.WriteString(cardContentStyle.Render(termtext.Plain(snap.LastCommitSummary)))
 		b.WriteString("\n\n")
 	}
 
 	if snap.LastReviewSummary != "" {
 		b.WriteString(cardTitleStyle.Render("~ 最近审阅 ~"))
 		b.WriteString("\n")
-		b.WriteString(cardContentStyle.Render(snap.LastReviewSummary))
+		b.WriteString(cardContentStyle.Render(termtext.Plain(snap.LastReviewSummary)))
 		b.WriteString("\n\n")
 	}
 
