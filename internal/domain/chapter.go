@@ -2,7 +2,6 @@ package domain
 
 import (
 	"fmt"
-	"unicode/utf8"
 )
 
 // ReviewInterval 全局审阅间隔（每 N 章触发一次）。
@@ -25,9 +24,4 @@ func ShouldArcReview(isArcEnd, isVolumeEnd bool, volume, arc int) (bool, string)
 		return true, fmt.Sprintf("第 %d 卷第 %d 弧结束，触发弧级评审", volume, arc)
 	}
 	return false, ""
-}
-
-// WordCount 按 rune 计算字数。
-func WordCount(content string) int {
-	return utf8.RuneCountInString(content)
 }

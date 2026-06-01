@@ -67,13 +67,13 @@ func (p *Progress) NextChapter() int {
 
 // LatestCompleted 返回最大已完成章节号；无已完成章节时返回 0。
 func (p *Progress) LatestCompleted() int {
-	max := 0
+	m := 0
 	for _, ch := range p.CompletedChapters {
-		if ch > max {
-			max = ch
+		if ch > m {
+			m = ch
 		}
 	}
-	return max
+	return m
 }
 
 // ExtractNovelNameFromPremise 从 premise 第一行 `# 书名`（可带《》包裹）提取书名。

@@ -108,8 +108,7 @@ func (d *Dispatcher) dedupe(next *Instruction) bool {
 	if d.lastSent != nil && d.lastSent.Agent == next.Agent && d.lastSent.Task == next.Task {
 		return true
 	}
-	sent := *next
-	d.lastSent = &sent
+	d.lastSent = new(*next)
 	return false
 }
 

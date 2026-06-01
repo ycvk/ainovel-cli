@@ -25,7 +25,7 @@ func newScriptedModel(responses ...agentcore.Message) *scriptedModel {
 }
 
 func (m *scriptedModel) Generate(context.Context, []agentcore.Message, []agentcore.ToolSpec, ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
-	return nil, errors.New("Generate should not be used")
+	return nil, errors.New("generate should not be used")
 }
 
 func (m *scriptedModel) GenerateStream(_ context.Context, messages []agentcore.Message, _ []agentcore.ToolSpec, _ ...agentcore.CallOption) (<-chan agentcore.StreamEvent, error) {

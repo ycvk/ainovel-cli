@@ -179,7 +179,7 @@ func mergeConfig(base Config, overlay configPatch) Config {
 				existing.BaseURL = *v.BaseURL
 			}
 			if v.Models != nil {
-				existing.Models = append([]string(nil), (*v.Models)...)
+				existing.Models = append([]string(nil), *v.Models...)
 			}
 			base.Providers[k] = existing
 		}
@@ -199,7 +199,7 @@ func mergeConfig(base Config, overlay configPatch) Config {
 				existing.Model = *v.Model
 			}
 			if v.Fallbacks != nil {
-				existing.Fallbacks = append([]ModelRef(nil), (*v.Fallbacks)...)
+				existing.Fallbacks = append([]ModelRef(nil), *v.Fallbacks...)
 			}
 			base.Roles[k] = existing
 		}

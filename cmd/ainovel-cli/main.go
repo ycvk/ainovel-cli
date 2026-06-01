@@ -11,12 +11,6 @@ import (
 	"github.com/voocel/ainovel-cli/internal/entry/tui"
 )
 
-var (
-	version = "dev"
-	commit  = "unknown"
-	date    = "unknown"
-)
-
 func main() {
 	opts, args, err := parseCLIOptions(os.Args[1:])
 	if err != nil {

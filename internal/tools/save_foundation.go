@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/voocel/agentcore/schema"
@@ -313,7 +314,7 @@ func decodeFoundationJSON(typeName, content string, out any) error {
 		return nil
 	}
 	hint := `常见原因：字符串值中的双引号未转义为 \", 换行未转义为 \n, 或对象字段间漏了逗号。请整段重新生成一次。`
-	if se, ok := err.(*json.SyntaxError); ok {
+	if se, ok := errors.AsType[*json.SyntaxError](err); ok {
 		line, col := offsetToLineCol(content, int(se.Offset))
 		return fmt.Errorf("parse %s JSON (line %d col %d): %w — %s", typeName, line, col, err, hint)
 	}

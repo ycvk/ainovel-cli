@@ -181,20 +181,20 @@ func (s *Snapshot) ensureChapterTrace(chapter int) *chapterTrace {
 }
 
 func cloneContextEvidence(evidence domain.ContextBuildEvidence) *domain.ContextBuildEvidence {
-	copy := evidence
-	copy.WarnSections = append([]string(nil), evidence.WarnSections...)
-	copy.TrimmedSections = append([]string(nil), evidence.TrimmedSections...)
-	return &copy
+	buildEvidence := evidence
+	buildEvidence.WarnSections = append([]string(nil), evidence.WarnSections...)
+	buildEvidence.TrimmedSections = append([]string(nil), evidence.TrimmedSections...)
+	return &buildEvidence
 }
 
 func cloneReviewEvidence(evidence domain.ReviewOutcomeEvidence) *domain.ReviewOutcomeEvidence {
-	copy := evidence
-	copy.AffectedChapters = append([]int(nil), evidence.AffectedChapters...)
-	copy.LowDimensions = append([]string(nil), evidence.LowDimensions...)
-	copy.FailedDimensions = append([]string(nil), evidence.FailedDimensions...)
-	copy.CriticalIssueTypes = append([]string(nil), evidence.CriticalIssueTypes...)
-	copy.TopReasonCodes = append([]string(nil), evidence.TopReasonCodes...)
-	return &copy
+	outcomeEvidence := evidence
+	outcomeEvidence.AffectedChapters = append([]int(nil), evidence.AffectedChapters...)
+	outcomeEvidence.LowDimensions = append([]string(nil), evidence.LowDimensions...)
+	outcomeEvidence.FailedDimensions = append([]string(nil), evidence.FailedDimensions...)
+	outcomeEvidence.CriticalIssueTypes = append([]string(nil), evidence.CriticalIssueTypes...)
+	outcomeEvidence.TopReasonCodes = append([]string(nil), evidence.TopReasonCodes...)
+	return &outcomeEvidence
 }
 
 // CompletedCount 返回已完成章节数（安全访问）。
@@ -210,11 +210,11 @@ func (s *Snapshot) LatestCompleted() int {
 	if s.Progress == nil {
 		return 0
 	}
-	max := 0
+	m := 0
 	for _, ch := range s.Progress.CompletedChapters {
-		if ch > max {
-			max = ch
+		if ch > m {
+			m = ch
 		}
 	}
-	return max
+	return m
 }

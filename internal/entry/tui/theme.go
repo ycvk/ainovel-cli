@@ -30,7 +30,7 @@ func themeColor(light, dark string) color.Color {
 	return lipgloss.LightDark(terminalIsDark)(lipgloss.Color(light), lipgloss.Color(dark))
 }
 
-var bodyTextColor color.Color = func() color.Color {
+var bodyTextColor = func() color.Color {
 	if terminalIsDark {
 		return lipgloss.NoColor{}
 	}
