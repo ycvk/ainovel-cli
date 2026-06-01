@@ -35,13 +35,13 @@ func TestStreamFlushDoesNotForceBottomAfterMouseWheelUp(t *testing.T) {
 	if !handled {
 		t.Fatalf("stream delta was not handled")
 	}
-	next = nextModel.(Model)
+	next = nextModel.(*Model)
 
 	nextModel, _, handled = next.handleRuntimeMsg(streamFlushTickMsg{})
 	if !handled {
 		t.Fatalf("stream flush tick was not handled")
 	}
-	next = nextModel.(Model)
+	next = nextModel.(*Model)
 
 	if next.streamScroll {
 		t.Fatalf("streamScroll = true after flush, want false")
@@ -109,7 +109,7 @@ func TestMouseWheelUsesPaneUnderPointerInsteadOfFocusedPane(t *testing.T) {
 	}
 }
 
-func newScrollTestModel(t *testing.T) Model {
+func newScrollTestModel(t *testing.T) *Model {
 	t.Helper()
 
 	m := NewModel(nil, nil)
@@ -136,18 +136,18 @@ func newScrollTestModel(t *testing.T) Model {
 	return m
 }
 
-func updateModel(t *testing.T, m Model, msg tea.Msg) Model {
+func updateModel(t *testing.T, m *Model, msg tea.Msg) *Model {
 	t.Helper()
 
 	nextModel, _ := m.Update(msg)
-	next, ok := nextModel.(Model)
+	next, ok := nextModel.(*Model)
 	if !ok {
-		t.Fatalf("updated model has type %T, want tui.Model", nextModel)
+		t.Fatalf("updated model has type %T, want *tui.Model", nextModel)
 	}
 	return next
 }
 
-func mouseWheelMsg(m Model, pane focusPane, button tea.MouseButton) tea.MouseWheelMsg {
+func mouseWheelMsg(m *Model, pane focusPane, button tea.MouseButton) tea.MouseWheelMsg {
 	x, y := panePoint(m, pane)
 	return tea.MouseWheelMsg(tea.Mouse{
 		X:      x,
@@ -156,7 +156,7 @@ func mouseWheelMsg(m Model, pane focusPane, button tea.MouseButton) tea.MouseWhe
 	})
 }
 
-func panePoint(m Model, pane focusPane) (int, int) {
+func panePoint(m *Model, pane focusPane) (int, int) {
 	topH, _, bodyH := m.layoutHeights()
 	leftW := m.sidebarWidth()
 	rightW := m.detailWidth()

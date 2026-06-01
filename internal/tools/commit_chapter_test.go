@@ -228,8 +228,25 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 	if err := s.Drafts.SaveDraft(2, polished); err != nil {
 		t.Fatalf("SaveDraft (polished): %v", err)
 	}
-	if _, err := tool.Execute(context.Background(), args); err != nil {
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
 		t.Fatalf("Execute after real polish: %v", err)
+	}
+	var payload struct {
+		RemainingQueue []int `json:"remaining_queue"`
+		QueueDrained   bool  `json:"queue_drained"`
+	}
+	if err := json.Unmarshal(result, &payload); err != nil {
+		t.Fatalf("Unmarshal rewrite result: %v", err)
+	}
+	if payload.RemainingQueue == nil {
+		t.Fatalf("remaining_queue encoded as null, want []")
+	}
+	if len(payload.RemainingQueue) != 0 {
+		t.Fatalf("remaining_queue = %v, want empty queue", payload.RemainingQueue)
+	}
+	if !payload.QueueDrained {
+		t.Fatalf("queue_drained = false, want true")
 	}
 }
 

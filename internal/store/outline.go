@@ -211,20 +211,19 @@ func (s *OutlineStore) CheckArcBoundary(chapter int) (*ArcBoundary, error) {
 
 	found := false
 	for vi := cur.volIdx; vi < len(volumes); vi++ {
-		startArc := 0
+		ai := 0
 		if vi == cur.volIdx {
-			startArc = cur.arcIdx + 1
+			ai = cur.arcIdx + 1
 		}
-		for ai := startArc; ai < len(volumes[vi].Arcs); ai++ {
-			b.NextVolume = volumes[vi].Index
-			b.NextArc = volumes[vi].Arcs[ai].Index
-			b.NeedsExpansion = !volumes[vi].Arcs[ai].IsExpanded()
-			found = true
-			break
+		if ai >= len(volumes[vi].Arcs) {
+			continue
 		}
-		if found {
-			break
-		}
+		nextArc := volumes[vi].Arcs[ai]
+		b.NextVolume = volumes[vi].Index
+		b.NextArc = nextArc.Index
+		b.NeedsExpansion = !nextArc.IsExpanded()
+		found = true
+		break
 	}
 
 	if b.IsVolumeEnd && !found {

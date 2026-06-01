@@ -278,7 +278,7 @@ const (
 //
 // 注意：返回值仅用于压缩阈值计算，不会缩小 LLM API 真实可发请求长度。
 // CompactWindow 永远不会让 effective 超过模型真窗口，因此切到小窗口模型也安全。
-func (c Config) ResolveContextWindow(modelName string) (int, ContextWindowSource) {
+func (c *Config) ResolveContextWindow(modelName string) (int, ContextWindowSource) {
 	w := DefaultContextWindow
 	src := CtxWindowDefault
 	if rw := models.DefaultRegistry().ResolveContextWindow(modelName); rw > 0 {
@@ -316,7 +316,7 @@ func contextWindowLabel(window int) string {
 
 // CandidateModels 返回某个 provider 下可供切换的模型列表。
 // 优先使用 provider 显式声明的 models；同时补充当前配置中已出现过的该 provider 模型。
-func (c Config) CandidateModels(provider string) []string {
+func (c *Config) CandidateModels(provider string) []string {
 	if provider == "" {
 		return nil
 	}
@@ -353,7 +353,7 @@ func (c Config) CandidateModels(provider string) []string {
 	return models
 }
 
-func (c Config) validateModelRef(owner string, ref ModelRef) error {
+func (c *Config) validateModelRef(owner string, ref ModelRef) error {
 	if ref.Provider == "" || ref.Model == "" {
 		return fmt.Errorf("%s must have both provider and model: %w", owner, errs.ErrConfig)
 	}

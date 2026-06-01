@@ -99,8 +99,10 @@ type Model struct {
 	mouseOff       bool // true 时已禁用鼠标上报，让用户原生拖拽选中复制；再次切换恢复
 }
 
+var _ tea.Model = (*Model)(nil)
+
 // NewModel 创建 TUI Model。
-func NewModel(rt *host.Host, bridge *askUserBridge) Model {
+func NewModel(rt *host.Host, bridge *askUserBridge) *Model {
 	ta := textarea.New()
 	ta.Prompt = ""
 	ta.Placeholder = placeholderForNewMode(startupModeQuick)
@@ -129,7 +131,7 @@ func NewModel(rt *host.Host, bridge *askUserBridge) Model {
 	stvp := newViewport(32, 20)
 	stvp.SetContent("")
 
-	return Model{
+	return &Model{
 		runtime:      rt,
 		askBridge:    bridge,
 		autoScroll:   true,
@@ -161,7 +163,7 @@ func inputTextareaStyles() textarea.Styles {
 	return styles
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		textarea.Blink,
 		listenEvents(m.runtime),
@@ -569,7 +571,7 @@ func (m *Model) layoutHeights() (topH, inputH, bodyH int) {
 	return
 }
 
-func (m Model) View() tea.View {
+func (m *Model) View() tea.View {
 	v := tea.NewView(m.viewString())
 	v.AltScreen = true
 	if m.mode != modeNew && !m.mouseOff {
@@ -578,7 +580,7 @@ func (m Model) View() tea.View {
 	return v
 }
 
-func (m Model) viewString() string {
+func (m *Model) viewString() string {
 	if m.width == 0 || m.height == 0 {
 		return "加载中..."
 	}
@@ -662,7 +664,7 @@ func (m *Model) sendCoCreate() tea.Cmd {
 	return runCoCreate(m.runtime, m.cocreate)
 }
 
-func (m Model) handleCoCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleCoCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.cocreate == nil {
 		return m, nil
 	}
@@ -804,7 +806,7 @@ func (m Model) handleCoCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // exitCoCreate 退出共创模式，取消进行中的 LLM 请求，恢复输入框状态。
-func (m Model) exitCoCreate() (tea.Model, tea.Cmd) {
+func (m *Model) exitCoCreate() (tea.Model, tea.Cmd) {
 	if m.cocreate.cancel != nil {
 		m.cocreate.cancel()
 	}
@@ -816,7 +818,7 @@ func (m Model) exitCoCreate() (tea.Model, tea.Cmd) {
 	return m, m.textarea.Focus()
 }
 
-func (m Model) handleAskUserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleAskUserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.askState == nil {
 		return m, nil
 	}

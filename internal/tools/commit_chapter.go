@@ -441,7 +441,11 @@ func (t *CommitChapterTool) executeRewriteCommit(
 	if progress.Flow == domain.FlowPolishing {
 		mode = "polish"
 	}
-	latest, _ := t.store.Progress.Load()
+	latest, err := t.store.Progress.Load()
+	if err != nil {
+		return nil, fmt.Errorf("rewrite: load progress after drain: %w: %w", errs.ErrStoreRead, err)
+	}
+	// Keep the tool JSON contract stable: empty rewrite queues marshal as [] instead of null.
 	remaining := []int{}
 	nextChapter := chapter + 1
 	flow := string(domain.FlowWriting)

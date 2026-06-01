@@ -320,7 +320,7 @@ func renderReportModal(width, height int, state *reportState) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
-func (m Model) handleReportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleReportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.report == nil {
 		return m, nil
 	}

@@ -141,8 +141,8 @@ func TestCheckpointStore_AllReturnsCopy(t *testing.T) {
 	all := cs.All()
 	all[0].Step = "tampered"
 
-	if got := cs.LatestGlobal(); got.Step != "plan" {
-		t.Fatalf("internal cache should be immune to caller mutation, got %q", got.Step)
+	if got := cs.LatestGlobal(); got == nil || got.Step != "plan" {
+		t.Fatalf("internal cache should be immune to caller mutation, got %+v", got)
 	}
 }
 

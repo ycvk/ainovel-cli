@@ -47,13 +47,13 @@ func TestStreamBufferTrimsOldestRounds(t *testing.T) {
 }
 
 func TestStreamDeltaSchedulesOneActiveFlush(t *testing.T) {
-	m := Model{}
+	m := &Model{}
 
 	nextModel, _, handled := m.handleRuntimeMsg(streamDeltaMsg("a"))
 	if !handled {
 		t.Fatalf("stream delta was not handled")
 	}
-	next := nextModel.(Model)
+	next := nextModel.(*Model)
 	if !next.streamDirty {
 		t.Fatalf("streamDirty = false, want true")
 	}
@@ -65,7 +65,7 @@ func TestStreamDeltaSchedulesOneActiveFlush(t *testing.T) {
 	if !handled {
 		t.Fatalf("second stream delta was not handled")
 	}
-	next = nextModel.(Model)
+	next = nextModel.(*Model)
 	if !next.streamFlushDue {
 		t.Fatalf("streamFlushDue = false, want still true while tick is pending")
 	}
@@ -75,15 +75,15 @@ func TestStreamDeltaSchedulesOneActiveFlush(t *testing.T) {
 }
 
 func TestStreamFlushTickStopsWhenIdle(t *testing.T) {
-	m := Model{}
+	m := &Model{}
 	nextModel, _, _ := m.handleRuntimeMsg(streamDeltaMsg("a"))
-	next := nextModel.(Model)
+	next := nextModel.(*Model)
 
 	nextModel, _, handled := next.handleRuntimeMsg(streamFlushTickMsg{})
 	if !handled {
 		t.Fatalf("stream flush tick was not handled")
 	}
-	next = nextModel.(Model)
+	next = nextModel.(*Model)
 	if next.streamDirty {
 		t.Fatalf("streamDirty = true, want false after flush")
 	}

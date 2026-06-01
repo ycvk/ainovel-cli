@@ -31,7 +31,7 @@ func keyScrollDirection(upward bool) scrollDirection {
 	return scrollDirectionDown
 }
 
-func (m Model) scrollPane(pane focusPane, msg tea.Msg, direction scrollDirection) (Model, tea.Cmd) {
+func (m *Model) scrollPane(pane focusPane, msg tea.Msg, direction scrollDirection) (*Model, tea.Cmd) {
 	switch pane {
 	case focusStream:
 		if direction == scrollDirectionUp {
@@ -64,7 +64,7 @@ func (m Model) scrollPane(pane focusPane, msg tea.Msg, direction scrollDirection
 	}
 }
 
-func (m Model) scrollPaneAtMouse(msg tea.MouseWheelMsg) (Model, tea.Cmd) {
+func (m *Model) scrollPaneAtMouse(msg tea.MouseWheelMsg) (*Model, tea.Cmd) {
 	mouse := msg.Mouse()
 	pane, ok := m.paneAtMouse(mouse.X, mouse.Y)
 	if !ok {

@@ -11,7 +11,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/utils"
 )
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -33,7 +33,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if next, cmd, handled := m.handleOverlayKeyMsg(msg); handled {
 		return next, cmd
 	}
@@ -54,7 +54,7 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.handleBaseKeyMsg(msg)
 }
 
-func (m Model) handleOverlayKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+func (m *Model) handleOverlayKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	switch {
 	case m.askState != nil:
 		return m.handleBlockingModalKey(msg, m.handleAskUserKey)
@@ -73,7 +73,7 @@ func (m Model) handleOverlayKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, boo
 	}
 }
 
-func (m Model) handleBlockingModalKey(msg tea.KeyPressMsg, next func(tea.KeyPressMsg) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd, bool) {
+func (m *Model) handleBlockingModalKey(msg tea.KeyPressMsg, next func(tea.KeyPressMsg) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd, bool) {
 	if keyString(msg) == keyCtrlC {
 		if m.quitPending {
 			return m, tea.Quit, true
@@ -94,7 +94,7 @@ func (m Model) handleBlockingModalKey(msg tea.KeyPressMsg, next func(tea.KeyPres
 
 // toggleMouseReporting 切换鼠标上报开关。开 → 关让用户原生拖拽选中复制；
 // 关 → 开恢复点击切焦点 / 滚轮。base 路径与 blocking modal 路径共用。
-func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
+func (m *Model) toggleMouseReporting() (*Model, tea.Cmd) {
 	// 欢迎页(modeNew)本就不开鼠标上报，原生拖拽即可复制；此处忽略 Ctrl+R，
 	// 避免误开上报反而破坏原生复制。鼠标上报由 enterRunning 在进入工作台时打开。
 	if m.mode == modeNew {
@@ -112,7 +112,7 @@ func (m *Model) enterRunning() tea.Cmd {
 	return nil
 }
 
-func (m Model) handleCommandPaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+func (m *Model) handleCommandPaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	if !m.compActive {
 		return m, nil, false
 	}
@@ -150,7 +150,7 @@ func (m Model) handleCommandPaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd,
 	}
 }
 
-func (m Model) handleBaseKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleBaseKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// 节流防御：粘贴 \n 在不支持 bracketed paste 的终端会退化成连续 KeyEnter；
 	// 真人按 Enter 与前一字符间隔通常 > 100ms，<50ms 极可能是粘贴流残片。
 	// 只记 Key.Text（字符流）—— 功能键（↑↓/Tab/Ctrl-x）不应污染节流，
@@ -265,7 +265,7 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
+func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	text := utils.CleanInputLine(m.textarea.Value())
 	if text == "" {
 		return m, nil
@@ -311,11 +311,11 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) handleVerticalScrollKey(msg tea.KeyPressMsg, upward bool) (tea.Model, tea.Cmd) {
+func (m *Model) handleVerticalScrollKey(msg tea.KeyPressMsg, upward bool) (tea.Model, tea.Cmd) {
 	return m.scrollPane(m.focusPane, msg, keyScrollDirection(upward))
 }
 
-func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	mouse := msg.Mouse()
 	_, pressed := msg.(tea.MouseClickMsg)
 	if m.cocreate != nil {
@@ -353,7 +353,7 @@ func (m Model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m.scrollPane(m.focusPane, msg, scrollDirectionNone)
 }
 
-func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+func (m *Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case eventMsg:
 		ev := host.Event(msg)
@@ -545,7 +545,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	}
 }
 
-func (m Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.err = msg.err
 		if m.mode != modeNew {
@@ -577,7 +577,7 @@ func (m Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
 	return m, fetchSnapshot(m.runtime)
 }
 
-func (m Model) handleCoCreateDoneMsg(msg cocreateDoneMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleCoCreateDoneMsg(msg cocreateDoneMsg) (tea.Model, tea.Cmd) {
 	if m.cocreate == nil || msg.reqID != m.cocreate.reqID {
 		return m, nil
 	}
@@ -593,7 +593,7 @@ func (m Model) handleCoCreateDoneMsg(msg cocreateDoneMsg) (tea.Model, tea.Cmd) {
 	return m, m.textarea.Focus()
 }
 
-func (m Model) handleTextareaMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTextareaMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.textarea, cmd = m.textarea.Update(msg)
 	m.refitTextareaHeight()

@@ -17,7 +17,7 @@ type slashCommandSpec struct {
 	AutoExecute bool
 	Hidden      bool
 	NeedsIdle   bool
-	Run         func(m Model, args []string) (tea.Model, tea.Cmd)
+	Run         func(m *Model, args []string) (tea.Model, tea.Cmd)
 }
 
 type slashCommand struct {
@@ -57,7 +57,7 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/help",
 			Description: "查看命令列表",
 			AutoExecute: true,
-			Run: func(m Model, _ []string) (tea.Model, tea.Cmd) {
+			Run: func(m *Model, _ []string) (tea.Model, tea.Cmd) {
 				m.help = newHelpState(m.width, m.height)
 				m.textarea.Blur()
 				return m, nil
@@ -69,7 +69,7 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/model [role]",
 			Description: "切换默认或角色模型",
 			AutoExecute: true,
-			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+			Run: func(m *Model, args []string) (tea.Model, tea.Cmd) {
 				roleHint := ""
 				if len(args) > 0 {
 					roleHint = args[0]
@@ -92,7 +92,7 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/report",
 			Description: "诊断小说创作健康度",
 			AutoExecute: true,
-			Run: func(m Model, _ []string) (tea.Model, tea.Cmd) {
+			Run: func(m *Model, _ []string) (tea.Model, tea.Cmd) {
 				m.reportSeq++
 				m.report = newReportState(m.width, m.height, m.reportSeq, time.Now())
 				m.textarea.Blur()
@@ -105,7 +105,7 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/import <path> [from=N] [regex=...]",
 			Description: "反推外部小说续写",
 			NeedsIdle:   true,
-			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+			Run: func(m *Model, args []string) (tea.Model, tea.Cmd) {
 				m.importSeq++
 				state, listenCmd, err := startImport(m.runtime, m.importSeq, args, m.width, m.height)
 				if err != nil {
@@ -126,7 +126,7 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/export [path] [from=N] [to=M] [--overwrite]",
 			Description: "导出已完成章节为 TXT/EPUB",
 			AutoExecute: true,
-			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+			Run: func(m *Model, args []string) (tea.Model, tea.Cmd) {
 				cmd, err := startExport(m.runtime, args)
 				if err != nil {
 					m.applyEvent(host.Event{
@@ -149,7 +149,7 @@ func commandSpecs() []slashCommandSpec {
 	return commandRegistryInstance().Visible()
 }
 
-func (m Model) handleSlashCommand(cmd slashCommand) (tea.Model, tea.Cmd) {
+func (m *Model) handleSlashCommand(cmd slashCommand) (tea.Model, tea.Cmd) {
 	spec, ok := commandRegistryInstance().Find(cmd.name)
 	if !ok {
 		m.applyEvent(host.Event{

@@ -175,7 +175,7 @@ func renderImportModal(width, height int, s *importState) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
-func (m Model) handleImportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleImportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.importer == nil {
 		return m, nil
 	}

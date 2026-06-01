@@ -159,7 +159,7 @@ func (s *modelSwitchState) apply(rt *host.Host) error {
 	return rt.SwitchModel(s.role(), s.provider(), s.model())
 }
 
-func (m Model) handleModelSwitchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleModelSwitchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.modelSwitch == nil {
 		return m, nil
 	}

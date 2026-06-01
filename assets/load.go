@@ -79,7 +79,7 @@ func loadReferences(style string) tools.References {
 		LongformPlanning:  mustRead(referencesFS, "references/longform-planning.md"),
 		Differentiation:   mustRead(referencesFS, "references/differentiation.md"),
 	}
-	if style != "" && style != "default" {
+	if style != "default" {
 		genreDir := "references/genres/" + style + "/"
 		if data, err := referencesFS.ReadFile(genreDir + "style-references.md"); err == nil {
 			refs.StyleReference = string(data)

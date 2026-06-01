@@ -106,6 +106,41 @@ func TestCheckArcBoundaryNextArcInSameVolume(t *testing.T) {
 	}
 }
 
+func TestCheckArcBoundaryNextArcInNextVolume(t *testing.T) {
+	s := setupLayered(t, []domain.VolumeOutline{
+		{
+			Index: 1, Title: "第一卷", Theme: "起步",
+			Arcs: []domain.ArcOutline{{
+				Index: 1, Title: "首弧", Goal: "目标",
+				Chapters: []domain.OutlineEntry{{Title: "章一", CoreEvent: "事件", Hook: "钩子"}},
+			}},
+		},
+		{
+			Index: 2, Title: "第二卷", Theme: "升级",
+			Arcs: []domain.ArcOutline{{
+				Index: 1, Title: "新弧", Goal: "目标2", EstimatedChapters: 10,
+			}},
+		},
+	})
+
+	b, err := s.Outline.CheckArcBoundary(1)
+	if err != nil {
+		t.Fatalf("CheckArcBoundary: %v", err)
+	}
+	if !b.IsArcEnd || !b.IsVolumeEnd {
+		t.Fatalf("expected arc+volume end, got arc=%v vol=%v", b.IsArcEnd, b.IsVolumeEnd)
+	}
+	if b.NeedsNewVolume {
+		t.Fatal("expected NeedsNewVolume=false when next volume already exists")
+	}
+	if b.NextVolume != 2 || b.NextArc != 1 {
+		t.Fatalf("expected next vol=2 arc=1, got vol=%d arc=%d", b.NextVolume, b.NextArc)
+	}
+	if !b.NeedsExpansion {
+		t.Fatal("expected NeedsExpansion=true for skeleton arc in next volume")
+	}
+}
+
 func TestAppendVolumeValidation(t *testing.T) {
 	s := setupLayered(t, []domain.VolumeOutline{{
 		Index: 1, Title: "第一卷", Theme: "起步",
